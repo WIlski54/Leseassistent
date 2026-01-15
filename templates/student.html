@@ -1,0 +1,3795 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LeseAssistent - Schüler</title>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Merriweather:wght@400;700&family=Noto+Sans+Arabic:wght@400;600;700&family=Patrick+Hand&display=swap" rel="stylesheet">
+    <link href="https://fonts.cdnfonts.com/css/opendyslexic" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.0/socket.io.min.js"></script>
+    <style>
+        :root {
+            --primary: #2563EB;
+            --primary-light: #3B82F6;
+            --primary-dark: #1D4ED8;
+            --success: #059669;
+            --warning: #D97706;
+            --error: #DC2626;
+            --text-dark: #1E293B;
+            --text-muted: #64748B;
+            --bg-light: #F1F5F9;
+            --highlight: #FEF08A;
+            --highlight-active: #FDE047;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            
+            /* Worksheet Colors */
+            --paper-bg: #FFFEF7;
+            --paper-lines: #E8E4D9;
+            --paper-margin: #F5CAC3;
+            --desk-bg: #8B7355;
+            
+            /* Accessibility Variables */
+            --reading-font: 'Merriweather', serif;
+            --reading-line-height: 1.8;
+            --reading-letter-spacing: 0em;
+            --reading-word-spacing: 0em;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Nunito', sans-serif;
+            /* Wooden desk texture background */
+            background: 
+                linear-gradient(90deg, rgba(139, 115, 85, 0.03) 1px, transparent 1px),
+                linear-gradient(rgba(139, 115, 85, 0.03) 1px, transparent 1px),
+                linear-gradient(135deg, #9C8B7A 0%, #7A6B5A 50%, #6B5C4B 100%);
+            background-size: 20px 20px, 20px 20px, 100% 100%;
+            min-height: 100vh;
+            padding: 1.5rem;
+        }
+
+        .container {
+            max-width: 850px;
+            margin: 0 auto;
+        }
+
+        /* ===== WORKSHEET PAPER EFFECT ===== */
+        .worksheet-paper {
+            position: relative;
+            background: var(--paper-bg);
+            border-radius: 4px;
+            box-shadow: 
+                0 1px 1px rgba(0,0,0,0.08),
+                0 2px 2px rgba(0,0,0,0.08),
+                0 4px 4px rgba(0,0,0,0.08),
+                0 8px 8px rgba(0,0,0,0.08),
+                0 16px 16px rgba(0,0,0,0.08),
+                inset 0 0 80px rgba(0,0,0,0.02);
+            margin-bottom: 1.5rem;
+        }
+
+        /* Paper holes effect */
+        .worksheet-paper::before {
+            content: '';
+            position: absolute;
+            left: 30px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: var(--paper-margin);
+            opacity: 0.6;
+        }
+
+        .paper-holes {
+            position: absolute;
+            left: 12px;
+            top: 0;
+            bottom: 0;
+            width: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-evenly;
+            pointer-events: none;
+        }
+
+        .paper-hole {
+            width: 14px;
+            height: 14px;
+            background: var(--desk-bg);
+            border-radius: 50%;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1.25rem 1.5rem 1.25rem 3rem;
+            background: var(--paper-bg);
+            border-bottom: 2px solid var(--paper-lines);
+            border-radius: 4px 4px 0 0;
+            position: relative;
+        }
+
+        /* Red margin line in header */
+        header::before {
+            content: '';
+            position: absolute;
+            left: 30px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: var(--paper-margin);
+            opacity: 0.6;
+        }
+
+        .back-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            border: 2px solid var(--paper-lines);
+            background: white;
+            cursor: pointer;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .back-btn:hover {
+            background: var(--bg-light);
+            border-color: var(--primary);
+        }
+
+        h1 {
+            font-family: 'Patrick Hand', 'Nunito', sans-serif;
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        h1::before {
+            content: '📖';
+            font-size: 1.4rem;
+        }
+
+        .session-badge {
+            background: #D1FAE5;
+            color: #065F46;
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+            font-weight: 700;
+            font-size: 0.8rem;
+            border: 1px solid #A7F3D0;
+        }
+
+        /* Phases */
+        .phase {
+            display: none;
+        }
+
+        .phase.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Card - Worksheet Section */
+        .card {
+            background: var(--paper-bg);
+            border-radius: 0;
+            padding: 1.5rem 1.5rem 1.5rem 3rem;
+            border-bottom: 1px dashed var(--paper-lines);
+            margin-bottom: 0;
+            position: relative;
+        }
+
+        .card:last-child {
+            border-bottom: none;
+            border-radius: 0 0 4px 4px;
+        }
+
+        /* Red margin line in cards */
+        .card::before {
+            content: '';
+            position: absolute;
+            left: 30px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: var(--paper-margin);
+            opacity: 0.6;
+        }
+
+        .card-title {
+            font-family: 'Patrick Hand', 'Nunito', sans-serif;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        /* Join Form - Worksheet Style */
+        .join-form {
+            text-align: center;
+            padding: 2.5rem 2rem;
+            background: var(--paper-bg);
+            border-radius: 4px;
+            box-shadow: 
+                0 1px 1px rgba(0,0,0,0.08),
+                0 2px 2px rgba(0,0,0,0.08),
+                0 4px 4px rgba(0,0,0,0.08),
+                0 8px 8px rgba(0,0,0,0.08),
+                inset 0 0 80px rgba(0,0,0,0.02);
+            position: relative;
+        }
+
+        /* Decorative corner fold */
+        .join-form::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 0;
+            height: 0;
+            border-style: solid;
+            border-width: 0 40px 40px 0;
+            border-color: transparent var(--desk-bg) transparent transparent;
+            opacity: 0.3;
+        }
+
+        .join-icon {
+            font-size: 3.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .join-title {
+            font-family: 'Patrick Hand', 'Nunito', sans-serif;
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--text-dark);
+        }
+
+        .join-subtitle {
+            color: var(--text-muted);
+            margin-bottom: 2rem;
+            font-size: 1.05rem;
+        }
+
+        .code-input {
+            font-family: 'Patrick Hand', monospace;
+            font-size: 2.5rem;
+            font-weight: 700;
+            text-align: center;
+            letter-spacing: 0.75rem;
+            padding: 1rem 1.5rem;
+            border: 3px dashed var(--paper-lines);
+            border-radius: 8px;
+            width: 100%;
+            max-width: 320px;
+            margin: 0 auto 1.5rem;
+            text-transform: uppercase;
+            background: white;
+            color: var(--primary);
+        }
+
+        .code-input:focus {
+            outline: none;
+            border-style: solid;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+        }
+
+        .code-input::placeholder {
+            color: #CBD5E1;
+            letter-spacing: 0.5rem;
+        }
+
+        .btn {
+            padding: 0.85rem 1.75rem;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 1.05rem;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: scale(1.02);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-large {
+            padding: 1rem 2rem;
+            font-size: 1.1rem;
+        }
+
+        /* Reading Card - Lined Paper Effect */
+        .reading-card {
+            background: var(--paper-bg);
+            border-radius: 0;
+            padding: 0;
+        }
+
+        .reading-text-wrapper {
+            position: relative;
+        }
+
+        .reading-text {
+            font-family: var(--reading-font);
+            font-size: 20px;
+            line-height: 2.2;
+            letter-spacing: var(--reading-letter-spacing);
+            word-spacing: var(--reading-word-spacing);
+            color: var(--text-dark);
+            min-height: 200px;
+            max-height: 50vh;
+            overflow-y: auto;
+            padding: 0.5rem 1rem;
+            border-radius: 0;
+            /* Lined paper background */
+            background: 
+                repeating-linear-gradient(
+                    transparent,
+                    transparent 43px,
+                    var(--paper-lines) 43px,
+                    var(--paper-lines) 44px
+                ),
+                var(--paper-bg);
+            background-attachment: local;
+        }
+
+        .reading-text .word {
+            display: inline;
+            padding: 0.15rem 0.25rem;
+            border-radius: 3px;
+            transition: all 0.15s ease;
+            cursor: pointer;
+        }
+
+        .reading-text .word:hover {
+            background: rgba(37, 99, 235, 0.15);
+            text-decoration: underline;
+            text-decoration-color: var(--primary);
+        }
+
+        .reading-text .word.active {
+            background: linear-gradient(135deg, var(--highlight) 0%, var(--highlight-active) 100%);
+            color: #92400E;
+            font-weight: 600;
+            transform: scale(1.02);
+            box-shadow: 0 2px 8px rgba(253, 224, 71, 0.4);
+        }
+
+        .reading-text .word.spoken {
+            color: var(--text-muted);
+        }
+
+        /* Focus Mode */
+        .reading-text.focus-mode .word {
+            opacity: 0.25;
+            transition: opacity 0.3s;
+        }
+
+        .reading-text.focus-mode .word.active,
+        .reading-text.focus-mode .word.focus-sentence {
+            opacity: 1;
+        }
+
+        .reading-text.focus-mode .word.spoken:not(.focus-sentence) {
+            opacity: 0.4;
+        }
+
+        /* Syllable display */
+        .syllable {
+            border-right: 1px dotted var(--text-muted);
+            padding-right: 1px;
+            margin-right: 1px;
+        }
+
+        .syllable:last-child {
+            border-right: none;
+        }
+
+        /* Reading ruler */
+        .reading-ruler {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--primary);
+            opacity: 0.5;
+            pointer-events: none;
+            display: none;
+            transition: top 0.1s ease-out;
+        }
+
+        .reading-text.show-ruler .reading-ruler {
+            display: block;
+        }
+
+        /* Audio Controls */
+        .audio-controls {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%);
+            border-radius: 12px;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .play-btn {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+
+        .play-btn:hover {
+            transform: scale(1.1);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .play-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .progress-container {
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: #C7D2FE;
+            border-radius: 4px;
+            cursor: pointer;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary) 0%, var(--primary-light) 100%);
+            width: 0%;
+            transition: width 0.1s linear;
+            border-radius: 4px;
+        }
+
+        .time-display {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .speed-control label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .speed-control select {
+            padding: 0.4rem 0.6rem;
+            border: 2px solid #C7D2FE;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        /* Accessibility Panel */
+        .a11y-panel {
+            background: linear-gradient(135deg, #F0FDF4 0%, #DCFCE7 100%);
+            border: 2px solid #86EFAC;
+            border-radius: 12px;
+            padding: 1rem 1.25rem;
+            margin-top: 1rem;
+        }
+
+        .a11y-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+        }
+
+        .a11y-icon {
+            font-size: 1.25rem;
+        }
+
+        .a11y-title {
+            font-weight: 700;
+            color: #166534;
+            flex: 1;
+        }
+
+        .a11y-toggle {
+            font-size: 0.8rem;
+            color: #166534;
+            transition: transform 0.3s;
+        }
+
+        .a11y-panel.collapsed .a11y-toggle {
+            transform: rotate(-90deg);
+        }
+
+        .a11y-panel.collapsed .a11y-content {
+            display: none;
+        }
+
+        .a11y-content {
+            display: grid;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .a11y-section {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .a11y-section-title {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #166534;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* Font Selection */
+        .font-options {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .font-btn-select {
+            padding: 0.5rem 0.75rem;
+            border: 2px solid #86EFAC;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .font-btn-select:hover {
+            border-color: #22C55E;
+            background: #F0FDF4;
+        }
+
+        .font-btn-select.selected {
+            border-color: #16A34A;
+            background: #22C55E;
+            color: white;
+        }
+
+        .font-btn-select.font-standard {
+            font-family: 'Merriweather', serif;
+        }
+
+        .font-btn-select.font-dyslexic {
+            font-family: 'OpenDyslexic', sans-serif;
+        }
+
+        .font-btn-select.font-sans {
+            font-family: 'Nunito', sans-serif;
+        }
+
+        /* Sliders */
+        .a11y-slider-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .a11y-slider-label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-dark);
+            min-width: 100px;
+        }
+
+        .a11y-slider {
+            flex: 1;
+            -webkit-appearance: none;
+            height: 8px;
+            border-radius: 4px;
+            background: #BBF7D0;
+            outline: none;
+        }
+
+        .a11y-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #16A34A;
+            cursor: pointer;
+        }
+
+        .a11y-slider-value {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #166534;
+            min-width: 40px;
+            text-align: right;
+        }
+
+        /* Checkboxes */
+        .a11y-checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .a11y-checkbox {
+            width: 20px;
+            height: 20px;
+            accent-color: #16A34A;
+            cursor: pointer;
+        }
+
+        .a11y-checkbox-label {
+            font-size: 0.9rem;
+            color: var(--text-dark);
+            cursor: pointer;
+        }
+
+        /* Action Buttons */
+        .action-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .action-btn {
+            padding: 1rem;
+            border-radius: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+            text-align: center;
+            font-size: 0.95rem;
+        }
+
+        .action-btn.speak {
+            background: linear-gradient(135deg, var(--success) 0%, #34D399 100%);
+            color: white;
+        }
+
+        .action-btn.tasks {
+            background: linear-gradient(135deg, var(--warning) 0%, #FBBF24 100%);
+            color: white;
+        }
+
+        .action-btn:hover {
+            transform: scale(1.02);
+            box-shadow: var(--shadow);
+        }
+
+        .action-icon {
+            font-size: 1.5rem;
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+
+        /* Language Selector with Flag Icons */
+        .language-selector {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .lang-btn {
+            width: 48px;
+            height: 36px;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 3px solid var(--bg-light);
+            background: white;
+            transition: all 0.2s;
+            overflow: hidden;
+            padding: 2px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .lang-btn img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 4px;
+        }
+
+        .lang-btn .emoji-flag {
+            font-size: 1.5rem;
+        }
+
+        .lang-btn:hover {
+            border-color: var(--primary-light);
+            transform: scale(1.05);
+        }
+
+        .lang-btn.selected {
+            border-color: var(--primary);
+            background: #EEF2FF;
+        }
+
+        .lang-btn.pending {
+            border-color: var(--warning);
+            background: #FEF3C7;
+            animation: pulse 2s infinite;
+        }
+
+        .lang-btn.approved {
+            border-color: var(--success);
+            background: #D1FAE5;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        /* Translation Request Status */
+        .translation-status {
+            margin-top: 0.75rem;
+            padding: 0.75rem 1rem;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            display: none;
+        }
+
+        .translation-status.pending {
+            display: block;
+            background: #FEF3C7;
+            color: #92400E;
+            border: 2px solid #F59E0B;
+        }
+
+        .translation-status.approved {
+            display: block;
+            background: #D1FAE5;
+            color: #065F46;
+            border: 2px solid #10B981;
+        }
+
+        .translation-status.denied {
+            display: block;
+            background: #FEE2E2;
+            color: #991B1B;
+            border: 2px solid #EF4444;
+        }
+
+        /* =========================================
+           BILINGUAL SPLIT VIEW
+           ========================================= */
+        .bilingual-view {
+            display: none;
+            margin-top: 1rem;
+            background: white;
+            border-radius: 16px;
+            box-shadow: var(--shadow-lg);
+            overflow: hidden;
+            border: 2px solid var(--primary-light);
+        }
+
+        .bilingual-view.visible {
+            display: block;
+        }
+
+        .bilingual-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            color: white;
+        }
+
+        .bilingual-title {
+            font-weight: 700;
+            font-size: 1rem;
+        }
+
+        .bilingual-close {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            font-size: 1.2rem;
+            cursor: pointer;
+            padding: 0.25rem 0.5rem;
+            border-radius: 6px;
+        }
+
+        .bilingual-close:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .bilingual-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0;
+        }
+
+        @media (max-width: 768px) {
+            .bilingual-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Layout: Stacked (untereinander) */
+        .bilingual-view.layout-stacked .bilingual-content {
+            grid-template-columns: 1fr;
+        }
+
+        .bilingual-view.layout-stacked .bilingual-column {
+            border-right: none;
+            border-bottom: 2px solid var(--bg-light);
+        }
+
+        .bilingual-view.layout-stacked .bilingual-column:last-child {
+            border-bottom: none;
+        }
+
+        /* Layout: Translation Only (nur Übersetzung) */
+        .bilingual-view.layout-translation-only .bilingual-content {
+            grid-template-columns: 1fr;
+        }
+
+        .bilingual-view.layout-translation-only .bilingual-column.original {
+            display: none;
+        }
+
+        .bilingual-view.layout-translation-only .bilingual-column.translation {
+            border-right: none;
+        }
+
+        .bilingual-view.layout-translation-only .bilingual-sync-toggle {
+            display: none;
+        }
+
+        .bilingual-column {
+            padding: 1rem;
+            border-right: 1px solid var(--bg-light);
+        }
+
+        .bilingual-column:last-child {
+            border-right: none;
+        }
+
+        .bilingual-column.original {
+            background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+        }
+
+        .bilingual-column.translation {
+            background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%);
+        }
+
+        .bilingual-column-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid rgba(0,0,0,0.1);
+        }
+
+        .bilingual-column-flag {
+            width: 28px;
+            height: 21px;
+            border-radius: 4px;
+            object-fit: cover;
+        }
+
+        .bilingual-column-title {
+            font-weight: 700;
+            font-size: 0.9rem;
+        }
+
+        .bilingual-column.original .bilingual-column-title {
+            color: #92400E;
+        }
+
+        .bilingual-column.translation .bilingual-column-title {
+            color: var(--primary);
+        }
+
+        /* Audio Player für beide Spalten */
+        .bilingual-audio {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+            padding: 0.5rem;
+            background: rgba(255,255,255,0.7);
+            border-radius: 8px;
+        }
+
+        .bilingual-play-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+
+        .bilingual-column.original .bilingual-play-btn {
+            background: linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%);
+            color: white;
+        }
+
+        .bilingual-column.translation .bilingual-play-btn {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            color: white;
+        }
+
+        .bilingual-play-btn:hover {
+            transform: scale(1.1);
+        }
+
+        .bilingual-play-btn.playing {
+            animation: pulse-play 1s infinite;
+        }
+
+        @keyframes pulse-play {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .bilingual-progress {
+            flex: 1;
+            height: 6px;
+            background: rgba(0,0,0,0.1);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .bilingual-progress-bar {
+            height: 100%;
+            width: 0%;
+            border-radius: 3px;
+            transition: width 0.1s;
+        }
+
+        .bilingual-column.original .bilingual-progress-bar {
+            background: #F59E0B;
+        }
+
+        .bilingual-column.translation .bilingual-progress-bar {
+            background: var(--primary);
+        }
+
+        .bilingual-time {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            min-width: 70px;
+            text-align: right;
+        }
+
+        /* Text Display mit Wort-Highlighting */
+        .bilingual-text {
+            font-size: 1.05rem;
+            line-height: 2;
+            max-height: 250px;
+            overflow-y: auto;
+            padding: 0.5rem;
+            background: rgba(255,255,255,0.5);
+            border-radius: 8px;
+        }
+
+        .bilingual-text .word {
+            display: inline;
+            padding: 0.1rem 0.2rem;
+            border-radius: 4px;
+            transition: all 0.15s ease-out;
+            cursor: pointer;
+        }
+
+        .bilingual-text .word:hover {
+            background: rgba(0,0,0,0.05);
+        }
+
+        .bilingual-text .word.highlight {
+            background: linear-gradient(135deg, #FCD34D 0%, #F59E0B 100%);
+            color: #78350F;
+            font-weight: 700;
+            padding: 0.15rem 0.3rem;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(245, 158, 11, 0.4);
+            transform: scale(1.05);
+            display: inline-block;
+        }
+
+        .bilingual-column.translation .bilingual-text .word.highlight {
+            background: linear-gradient(135deg, #818CF8 0%, #6366F1 100%);
+            color: white;
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
+        }
+
+        /* RTL Support for Arabic (and other RTL languages) */
+        .bilingual-text.rtl {
+            direction: rtl;
+            text-align: right;
+            font-family: 'Noto Sans Arabic', 'Amiri', 'Scheherazade', Arial, sans-serif;
+            font-size: 1.15rem;
+            line-height: 2.2;
+        }
+
+        .bilingual-text.rtl .word {
+            direction: rtl;
+        }
+
+        .bilingual-column.rtl .bilingual-column-header {
+            flex-direction: row-reverse;
+        }
+
+        .bilingual-column.rtl .bilingual-audio {
+            flex-direction: row-reverse;
+        }
+
+        .bilingual-column.rtl .bilingual-time {
+            text-align: left;
+        }
+        
+        .bilingual-column.rtl .bilingual-progress {
+            direction: ltr;  /* Progress bar stays LTR */
+        }
+
+        /* Sync Mode Toggle */
+        .bilingual-sync-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: var(--bg-light);
+            border-top: 1px solid rgba(0,0,0,0.1);
+        }
+
+        .bilingual-sync-toggle label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+
+        .bilingual-sync-toggle input[type="checkbox"] {
+            accent-color: var(--primary);
+        }
+
+        /* Translation Status (keep existing) */
+        .translation-status {
+            margin-top: 0.75rem;
+            padding: 0.75rem 1rem;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            display: none;
+        }
+
+        .translation-status.pending {
+            display: block;
+            background: #FEF3C7;
+            color: #92400E;
+            border: 2px solid #F59E0B;
+        }
+
+        .translation-status.approved {
+            display: block;
+            background: #D1FAE5;
+            color: #065F46;
+            border: 2px solid #10B981;
+        }
+
+        .translation-status.denied {
+            display: block;
+            background: #FEE2E2;
+            color: #991B1B;
+            border: 2px solid #EF4444;
+        }
+
+        /* Hide old translation panel - replaced by bilingual view */
+        .translation-panel {
+            display: none !important;
+        }
+
+        /* Anonymous ID Badge */
+        .anonymous-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: #92400E;
+            margin-left: auto;
+        }
+
+        /* =========================================
+           WORD INFO MODAL (Vocabulary System)
+           ========================================= */
+        .word-info-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 200;
+            justify-content: center;
+            align-items: center;
+            padding: 1rem;
+        }
+
+        .word-info-overlay.visible {
+            display: flex;
+            animation: fadeIn 0.2s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .word-info-modal {
+            background: white;
+            border-radius: 20px;
+            max-width: 450px;
+            width: 100%;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.25);
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .word-info-header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            color: white;
+            padding: 1.25rem;
+            border-radius: 20px 20px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .word-info-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .word-info-meta {
+            font-size: 0.85rem;
+            opacity: 0.9;
+            margin-top: 0.25rem;
+        }
+
+        .word-info-close {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            font-size: 1.25rem;
+            cursor: pointer;
+            padding: 0.25rem 0.5rem;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+
+        .word-info-close:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        .word-info-image-container {
+            padding: 1rem;
+            text-align: center;
+            background: var(--bg-light);
+        }
+
+        .word-info-image {
+            max-width: 100%;
+            max-height: 200px;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+        }
+
+        .word-info-image-loading {
+            padding: 2rem;
+            color: var(--text-muted);
+        }
+
+        .word-info-image-loading .spinner {
+            width: 32px;
+            height: 32px;
+            margin-bottom: 0.5rem;
+        }
+
+        .word-info-no-image {
+            padding: 1.5rem;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .word-info-content {
+            padding: 1.25rem;
+        }
+
+        .word-info-section {
+            margin-bottom: 1rem;
+        }
+
+        .word-info-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .word-info-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 0.25rem;
+        }
+
+        .word-info-text {
+            font-size: 1rem;
+            line-height: 1.6;
+            color: var(--text-dark);
+        }
+
+        .word-info-example {
+            background: #FEF3C7;
+            padding: 0.75rem 1rem;
+            border-radius: 10px;
+            border-left: 4px solid #F59E0B;
+            font-style: italic;
+        }
+
+        .word-info-translation {
+            background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%);
+            padding: 0.75rem 1rem;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .word-info-translation-flag {
+            width: 24px;
+            height: 18px;
+            border-radius: 3px;
+        }
+
+        .word-info-actions {
+            padding: 1rem 1.25rem;
+            background: var(--bg-light);
+            border-radius: 0 0 20px 20px;
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .word-info-btn {
+            flex: 1;
+            padding: 0.75rem;
+            border-radius: 10px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            transition: all 0.2s;
+        }
+
+        .word-info-btn-primary {
+            background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
+            color: white;
+        }
+
+        .word-info-btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+        }
+
+        .word-info-btn-primary:disabled {
+            background: #9CA3AF;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .word-info-btn-secondary {
+            background: white;
+            color: var(--text-dark);
+            border: 2px solid var(--bg-light);
+        }
+
+        .word-info-btn-secondary:hover {
+            background: var(--bg-light);
+        }
+
+        /* Vocabulary List Panel */
+        .vocab-list-btn {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            padding: 0.75rem 1.25rem;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(124, 58, 237, 0.4);
+            z-index: 50;
+            display: none;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s;
+        }
+
+        .vocab-list-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(124, 58, 237, 0.5);
+        }
+
+        .vocab-list-btn.has-words {
+            display: flex;
+        }
+
+        .vocab-count-badge {
+            background: white;
+            color: #7C3AED;
+            padding: 0.15rem 0.5rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+
+        /* Vocabulary List Overlay */
+        .vocab-list-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 250;
+            justify-content: center;
+            align-items: center;
+            padding: 1rem;
+        }
+
+        .vocab-list-overlay.visible {
+            display: flex;
+        }
+
+        .vocab-list-modal {
+            background: white;
+            border-radius: 20px;
+            max-width: 500px;
+            width: 100%;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.25);
+        }
+
+        .vocab-list-header {
+            background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%);
+            color: white;
+            padding: 1.25rem;
+            border-radius: 20px 20px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .vocab-list-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+
+        .vocab-list-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+
+        .vocab-item {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem;
+            background: var(--bg-light);
+            border-radius: 10px;
+            margin-bottom: 0.5rem;
+            gap: 0.75rem;
+        }
+
+        .vocab-item-word {
+            font-weight: 700;
+            color: var(--primary);
+            flex: 1;
+        }
+
+        .vocab-item-translation {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .vocab-item-remove {
+            background: none;
+            border: none;
+            color: #EF4444;
+            cursor: pointer;
+            padding: 0.25rem;
+            font-size: 1.1rem;
+        }
+
+        .vocab-list-empty {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+        }
+
+        .vocab-list-actions {
+            padding: 1rem;
+            background: var(--bg-light);
+            border-radius: 0 0 20px 20px;
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        /* =========================================
+           TEXT SIMPLIFICATION (Differentiation)
+           ========================================= */
+        .simplification-panel {
+            display: none;
+            background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+            border-radius: 16px;
+            padding: 1rem;
+            margin-top: 1rem;
+            border: 2px solid #F59E0B;
+        }
+
+        .simplification-panel.visible {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .simplification-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .simplification-title {
+            font-weight: 700;
+            color: #92400E;
+        }
+
+        .simplification-levels {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .level-btn {
+            flex: 1;
+            min-width: 80px;
+            padding: 0.75rem 0.5rem;
+            border: 2px solid #F59E0B;
+            border-radius: 10px;
+            background: white;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        .level-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+        }
+
+        .level-btn.active {
+            background: #F59E0B;
+            color: white;
+            border-color: #D97706;
+        }
+
+        .level-btn.loading {
+            opacity: 0.6;
+            cursor: wait;
+        }
+
+        .level-name {
+            font-weight: 700;
+            font-size: 1.1rem;
+            display: block;
+        }
+
+        .level-desc {
+            font-size: 0.7rem;
+            color: #92400E;
+            margin-top: 0.25rem;
+        }
+
+        .level-btn.active .level-desc {
+            color: rgba(255,255,255,0.9);
+        }
+
+        /* Simplified text display */
+        .simplified-text-container {
+            display: none;
+            margin-top: 1rem;
+        }
+
+        .simplified-text-container.visible {
+            display: block;
+        }
+
+        .simplified-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .simplified-badge {
+            background: #F59E0B;
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .simplified-back-btn {
+            background: none;
+            border: none;
+            color: #92400E;
+            cursor: pointer;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .simplified-back-btn:hover {
+            text-decoration: underline;
+        }
+
+        .simplified-text-box {
+            background: white;
+            border-radius: 12px;
+            padding: 1rem;
+            border: 2px solid #FDE68A;
+            line-height: 1.8;
+        }
+
+        /* Translation Popup (for word translation - keeping old functionality) */
+        .translation-popup {
+            display: none;
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            border-radius: 16px;
+            padding: 1rem 1.5rem;
+            box-shadow: var(--shadow-lg);
+            max-width: 90%;
+            z-index: 100;
+        }
+
+        .translation-popup.visible {
+            display: block;
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translate(-50%, 20px); }
+            to { opacity: 1; transform: translate(-50%, 0); }
+        }
+
+        .translation-original {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .translation-result {
+            color: var(--primary);
+            font-size: 1.1rem;
+        }
+
+        .translation-close {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            background: none;
+            border: none;
+            font-size: 1.25rem;
+            cursor: pointer;
+            color: var(--text-muted);
+        }
+
+        /* Waiting for text */
+        .waiting-message {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-muted);
+        }
+
+        .waiting-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Session Ended Overlay */
+        .session-ended-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .session-ended-overlay.visible {
+            display: flex;
+        }
+
+        .session-ended-box {
+            background: white;
+            border-radius: 20px;
+            padding: 2rem;
+            text-align: center;
+            max-width: 90%;
+        }
+
+        .session-ended-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        /* Toast */
+        .toast-container {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1001;
+        }
+
+        .toast {
+            padding: 1rem 1.5rem;
+            border-radius: 12px;
+            color: white;
+            font-weight: 600;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .toast.success { background: var(--success); }
+        .toast.error { background: var(--error); }
+        .toast.info { background: var(--primary); }
+
+        /* Loading spinner */
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .audio-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .play-btn {
+                align-self: center;
+            }
+            
+            .a11y-slider-row {
+                flex-wrap: wrap;
+            }
+            
+            .a11y-slider-label {
+                min-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Phase 1: Join Session -->
+        <div class="phase active" id="phaseJoin">
+            <div class="card join-form">
+                <div class="join-icon">📚</div>
+                <div class="join-title">LeseAssistent</div>
+                <div class="join-subtitle">Gib den Code von deinem Lehrer ein</div>
+                
+                <input type="text" class="code-input" id="sessionCodeInput" 
+                       placeholder="ABC123" maxlength="6" autocomplete="off">
+                
+                <button class="btn btn-primary btn-large" onclick="joinSession()">
+                    🚀 Beitreten
+                </button>
+            </div>
+        </div>
+
+        <!-- Phase 2: Reading View -->
+        <div class="phase" id="phaseReading">
+            <div class="worksheet-paper">
+                <!-- Paper holes decoration -->
+                <div class="paper-holes">
+                    <div class="paper-hole"></div>
+                    <div class="paper-hole"></div>
+                    <div class="paper-hole"></div>
+                </div>
+                
+                <header>
+                    <button class="back-btn" onclick="goBack()">←</button>
+                    <h1>LeseAssistent</h1>
+                    <div class="session-badge" id="sessionBadge">🔗 Verbunden</div>
+                </header>
+
+                <div class="card" id="textCard">
+                    <div class="waiting-message" id="waitingMessage">
+                        <div class="waiting-icon">⏳</div>
+                        <div>Warte auf Text vom Lehrer...</div>
+                    </div>
+                
+                <div id="readingContent" style="display: none;">
+                    <div class="reading-card">
+                        <div class="reading-text-wrapper">
+                            <div class="reading-text" id="readingText"></div>
+                            <div class="reading-ruler"></div>
+                        </div>
+                    </div>
+
+                    <!-- Audio Controls -->
+                    <div class="audio-controls" id="audioControls">
+                        <button class="play-btn" id="playBtn" onclick="togglePlayback()" disabled>
+                            ▶️
+                        </button>
+                        <div class="progress-container">
+                            <div class="progress-bar" onclick="seekAudio(event)">
+                                <div class="progress-fill" id="progressFill"></div>
+                            </div>
+                            <div class="time-display">
+                                <span id="currentTime">0:00</span> / <span id="totalTime">0:00</span>
+                            </div>
+                        </div>
+                        <div class="speed-control">
+                            <label for="playbackSpeed">Tempo:</label>
+                            <select id="playbackSpeed" onchange="changePlaybackSpeed()">
+                                <option value="0.5">0.5x</option>
+                                <option value="0.75">0.75x</option>
+                                <option value="1" selected>1x</option>
+                                <option value="1.25">1.25x</option>
+                                <option value="1.5">1.5x</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Text Simplification Panel (visible when enabled by teacher) -->
+                    <div class="simplification-panel" id="simplificationPanel">
+                        <div class="simplification-header">
+                            <span>📚</span>
+                            <span class="simplification-title">Text zu schwer? Wähle ein einfacheres Niveau:</span>
+                        </div>
+                        <div class="simplification-levels">
+                            <button class="level-btn" data-level="A1" onclick="requestSimplifiedText('A1', this)">
+                                <span class="level-name">A1</span>
+                                <span class="level-desc">Sehr einfach</span>
+                            </button>
+                            <button class="level-btn" data-level="A2" onclick="requestSimplifiedText('A2', this)">
+                                <span class="level-name">A2</span>
+                                <span class="level-desc">Einfach</span>
+                            </button>
+                            <button class="level-btn" data-level="B1" onclick="requestSimplifiedText('B1', this)">
+                                <span class="level-name">B1</span>
+                                <span class="level-desc">Mittelstufe</span>
+                            </button>
+                            <button class="level-btn active" data-level="original" onclick="showOriginalText(this)">
+                                <span class="level-name">Original</span>
+                                <span class="level-desc">Unverändert</span>
+                            </button>
+                        </div>
+                        
+                        <!-- Simplified Text Display -->
+                        <div class="simplified-text-container" id="simplifiedTextContainer">
+                            <div class="simplified-header">
+                                <span class="simplified-badge" id="simplifiedBadge">A2</span>
+                                <button class="simplified-back-btn" onclick="showOriginalText()">
+                                    ↩️ Zurück zum Original
+                                </button>
+                            </div>
+                            <div class="simplified-text-box" id="simplifiedTextBox">
+                                <!-- Simplified text will be shown here -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="action-buttons">
+                        <button class="action-btn speak" onclick="openSpeakingPractice()">
+                            <span class="action-icon">🎤</span>
+                            Nachsprechen
+                        </button>
+                        <button class="action-btn tasks" id="tasksBtn" onclick="openTasks()" style="display: none;">
+                            <span class="action-icon">📝</span>
+                            Aufgaben
+                        </button>
+                    </div>
+
+                    <!-- Language Selector for Translation Request -->
+                    <div class="language-selector">
+                        <span style="font-weight: 600; margin-right: 0.5rem;">🌍 Übersetzung anfordern:</span>
+                        <button class="lang-btn" data-lang="tr" title="Türkisch" onclick="requestTranslation('tr', this)">
+                            <img src="/static/t.png" alt="TR">
+                        </button>
+                        <button class="lang-btn" data-lang="bg" title="Bulgarisch" onclick="requestTranslation('bg', this)">
+                            <img src="/static/b.png" alt="BG">
+                        </button>
+                        <button class="lang-btn" data-lang="ar" title="Arabisch" onclick="requestTranslation('ar', this)">
+                            <img src="/static/a.png" alt="AR">
+                        </button>
+                        <button class="lang-btn" data-lang="uk" title="Ukrainisch" onclick="requestTranslation('uk', this)">
+                            <img src="/static/u.png" alt="UK">
+                        </button>
+                        <button class="lang-btn" data-lang="en" title="Englisch" onclick="requestTranslation('en', this)">
+                            <img src="/static/g.png" alt="EN">
+                        </button>
+                    </div>
+                    
+                    <!-- Translation Request Status -->
+                    <div class="translation-status" id="translationStatus">
+                        <span id="translationStatusText"></span>
+                    </div>
+                    
+                    <!-- Bilingual Split View (shows when translation approved) -->
+                    <div class="bilingual-view" id="bilingualView">
+                        <div class="bilingual-header">
+                            <span class="bilingual-title">📚 Zweisprachige Ansicht</span>
+                            <button class="bilingual-close" onclick="closeBilingualView()">✕</button>
+                        </div>
+                        
+                        <div class="bilingual-content">
+                            <!-- Original (German) Column -->
+                            <div class="bilingual-column original">
+                                <div class="bilingual-column-header">
+                                    <img src="/static/d.png" alt="DE" class="bilingual-column-flag">
+                                    <span class="bilingual-column-title">🇩🇪 Original (Deutsch)</span>
+                                </div>
+                                
+                                <div class="bilingual-audio">
+                                    <button class="bilingual-play-btn" id="originalPlayBtn" onclick="playOriginalAudio()">
+                                        ▶
+                                    </button>
+                                    <div class="bilingual-progress">
+                                        <div class="bilingual-progress-bar" id="originalProgressBar"></div>
+                                    </div>
+                                    <span class="bilingual-time" id="originalTime">0:00 / 0:00</span>
+                                </div>
+                                
+                                <div class="bilingual-text" id="originalBilingualText">
+                                    <!-- Original text with word spans -->
+                                </div>
+                            </div>
+                            
+                            <!-- Translation Column -->
+                            <div class="bilingual-column translation">
+                                <div class="bilingual-column-header">
+                                    <img src="" alt="" class="bilingual-column-flag" id="translationFlag">
+                                    <span class="bilingual-column-title" id="translationColumnTitle">Übersetzung</span>
+                                </div>
+                                
+                                <div class="bilingual-audio">
+                                    <button class="bilingual-play-btn" id="translationPlayBtn" onclick="playTranslationAudio()">
+                                        ▶
+                                    </button>
+                                    <div class="bilingual-progress">
+                                        <div class="bilingual-progress-bar" id="translationProgressBar"></div>
+                                    </div>
+                                    <span class="bilingual-time" id="translationTime">0:00 / 0:00</span>
+                                </div>
+                                
+                                <div class="bilingual-text" id="translationBilingualText">
+                                    <!-- Translated text with word spans -->
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bilingual-sync-toggle">
+                            <input type="checkbox" id="syncModeCheckbox" onchange="toggleSyncMode()">
+                            <label for="syncModeCheckbox">🔗 Sync-Modus: Beide Texte gleichzeitig abspielen</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- End of worksheet-paper -->
+    </div>
+</div>
+
+    <!-- Translation Popup -->
+    <div class="translation-popup" id="translationPopup">
+        <button class="translation-close" onclick="closeTranslation()">✕</button>
+        <div class="translation-original" id="translationOriginal"></div>
+        <div class="translation-result" id="translationResult"></div>
+    </div>
+
+    <!-- Word Info Modal -->
+    <div class="word-info-overlay" id="wordInfoOverlay" onclick="closeWordInfoOnOverlay(event)">
+        <div class="word-info-modal" onclick="event.stopPropagation()">
+            <div class="word-info-header">
+                <div>
+                    <div class="word-info-title" id="wordInfoTitle">Wort</div>
+                    <div class="word-info-meta" id="wordInfoMeta"></div>
+                </div>
+                <button class="word-info-close" onclick="closeWordInfo()">✕</button>
+            </div>
+            
+            <div class="word-info-image-container" id="wordInfoImageContainer">
+                <div class="word-info-image-loading" id="wordInfoImageLoading">
+                    <div class="spinner"></div>
+                    <div>Bild wird erstellt...</div>
+                </div>
+                <img class="word-info-image" id="wordInfoImage" style="display: none;">
+                <div class="word-info-no-image" id="wordInfoNoImage" style="display: none;">
+                    📷 Kein Bild verfügbar
+                </div>
+            </div>
+            
+            <div class="word-info-content">
+                <div class="word-info-section">
+                    <div class="word-info-label">📖 Erklärung</div>
+                    <div class="word-info-text" id="wordInfoExplanation">Lädt...</div>
+                </div>
+                
+                <div class="word-info-section" id="wordInfoExampleSection" style="display: none;">
+                    <div class="word-info-label">💬 Beispielsatz</div>
+                    <div class="word-info-example" id="wordInfoExample"></div>
+                </div>
+                
+                <div class="word-info-section" id="wordInfoTranslationSection" style="display: none;">
+                    <div class="word-info-label">🌍 Übersetzung</div>
+                    <div class="word-info-translation">
+                        <img class="word-info-translation-flag" id="wordInfoTranslationFlag" src="">
+                        <span id="wordInfoTranslation"></span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="word-info-actions">
+                <button class="word-info-btn word-info-btn-primary" id="addToVocabBtn" onclick="addCurrentWordToVocab()">
+                    ➕ Zur Wortliste
+                </button>
+                <button class="word-info-btn word-info-btn-secondary" onclick="playWordAudio()">
+                    🔊 Anhören
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Vocabulary List Button (floating) -->
+    <button class="vocab-list-btn" id="vocabListBtn" onclick="openVocabList()">
+        📝 Wortliste
+        <span class="vocab-count-badge" id="vocabCountBadge">0</span>
+    </button>
+
+    <!-- Vocabulary List Modal -->
+    <div class="vocab-list-overlay" id="vocabListOverlay" onclick="closeVocabListOnOverlay(event)">
+        <div class="vocab-list-modal" onclick="event.stopPropagation()">
+            <div class="vocab-list-header">
+                <span class="vocab-list-title">📝 Meine Wortliste</span>
+                <button class="word-info-close" onclick="closeVocabList()">✕</button>
+            </div>
+            
+            <div class="vocab-list-content" id="vocabListContent">
+                <!-- Content rendered dynamically by renderVocabList() -->
+            </div>
+            
+            <div class="vocab-list-actions">
+                <button class="word-info-btn word-info-btn-primary" onclick="exportVocabList()">
+                    📥 Als PDF exportieren
+                </button>
+                <button class="word-info-btn word-info-btn-secondary" onclick="clearVocabList()">
+                    🗑️ Liste leeren
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Session Ended Overlay -->
+    <div class="session-ended-overlay" id="sessionEndedOverlay">
+        <div class="session-ended-box">
+            <div class="session-ended-icon">👋</div>
+            <h2>Session beendet</h2>
+            <p style="color: var(--text-muted); margin: 1rem 0;">Der Lehrer hat die Session beendet.</p>
+            <button class="btn btn-primary" onclick="location.reload()">Neue Session beitreten</button>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script>
+        const API_BASE_URL = window.location.origin;
+        
+        // Socket & Session
+        let socket = null;
+        let sessionCode = null;
+        let anonymousId = null;  // Anonymer Tiername für diesen Schüler
+        
+        // Audio State
+        let audioContext = null;
+        let audioBuffer = null;
+        let audioSource = null;
+        let isPlaying = false;
+        let startTime = 0;
+        let pauseTime = 0;
+        let animationFrameId = null;
+        
+        // Word Timings from ElevenLabs
+        let wordTimings = [];
+        let currentText = '';
+        
+        // Translation
+        let selectedLanguage = null;
+        let translationRequestPending = false;
+        let currentTranslatedText = '';
+        let currentTranslationLanguage = '';
+        
+        // Bilingual Audio State
+        let translationAudioContext = null;
+        let translationAudioBuffer = null;
+        let translationAudioSource = null;
+        let isTranslationPlaying = false;
+        let translationStartTime = 0;
+        let translationPauseTime = 0;
+        let translationAnimationFrameId = null;
+        let translationWordTimings = [];
+        let syncModeEnabled = false;
+        
+        // Language flag mapping
+        const languageFlags = {
+            'tr': '/static/t.png',
+            'bg': '/static/b.png',
+            'ar': '/static/a.png',
+            'uk': '/static/u.png',
+            'en': '/static/g.png'
+        };
+        
+        const languageNames = {
+            'tr': '🇹🇷 Türkisch',
+            'bg': '🇧🇬 Bulgarisch',
+            'ar': '🇸🇦 Arabisch',
+            'uk': '🇺🇦 Ukrainisch',
+            'en': '🇬🇧 Englisch'
+        };
+        
+        // Vocabulary System
+        let vocabularyList = [];
+        let currentWordInfo = null;  // Aktuell angezeigtes Wort im Modal
+        const VOCAB_STORAGE_KEY = 'leseassistent_vocabulary';
+        
+        // Text Simplification
+        let simplificationEnabled = false;
+        let currentSimplificationLevel = 'original';
+        let simplifiedTexts = {};  // Cache: {level: text}
+        let originalText = '';  // Original text backup
+        
+        // Accessibility Settings
+        let a11ySettings = {
+            font: 'standard',
+            lineHeight: 1.8,
+            letterSpacing: 0,
+            wordSpacing: 0,
+            syllables: false,
+            focusMode: false,
+            ruler: false
+        };
+
+        // =============================================================================
+        // INITIALIZATION
+        // =============================================================================
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            initSocket();
+            loadVocabularyFromStorage();
+        });
+
+        function initSocket() {
+            socket = io(API_BASE_URL);
+            
+            socket.on('connect', () => {
+                console.log('Socket connected');
+                
+                // Auto-join wenn Code in URL (Rückkehr von Nachsprechen/Aufgaben)
+                const urlParams = new URLSearchParams(window.location.search);
+                const codeFromUrl = urlParams.get('code');
+                if (codeFromUrl && !sessionCode) {
+                    document.getElementById('sessionCodeInput').value = codeFromUrl;
+                    joinSession();
+                }
+            });
+
+            socket.on('join_success', (data) => {
+                sessionCode = data.code;
+                anonymousId = data.anonymous_id || '🐾 Gast';
+                showReadingPhase();
+                
+                // Apply settings from teacher if they exist
+                if (data.settings && Object.keys(data.settings).length > 0) {
+                    applySettings(data.settings);
+                }
+                
+                if (data.text) {
+                    displayText(data.text);
+                }
+                
+                // Show tasks button if tasks are available
+                if (data.tasks_available) {
+                    document.getElementById('tasksBtn').style.display = 'block';
+                    sessionStorage.setItem('leseassistent_tasks', JSON.stringify(data.tasks || []));
+                }
+                
+                // Show simplification panel if enabled
+                if (data.simplification_enabled) {
+                    simplificationEnabled = true;
+                    document.getElementById('simplificationPanel').classList.add('visible');
+                }
+                
+                console.log('Joined as:', anonymousId);
+            });
+
+            socket.on('join_error', (data) => {
+                showToast(data.error, 'error');
+            });
+
+            socket.on('text_updated', (data) => {
+                displayText(data.text);
+                // Reset translation when text changes
+                resetTranslationState();
+                // Reset simplification when text changes
+                resetSimplificationState();
+                showToast('📄 Neuer Text vom Lehrer!', 'success');
+            });
+
+            socket.on('session_ended', (data) => {
+                document.getElementById('sessionEndedOverlay').classList.add('visible');
+            });
+
+            socket.on('settings_updated', (data) => {
+                applySettings(data.settings);
+                showToast('⚙️ Lesehilfen vom Lehrer aktualisiert', 'info');
+            });
+            
+            // Simplification status changed by teacher
+            socket.on('simplification_status_changed', (data) => {
+                simplificationEnabled = data.enabled;
+                const panel = document.getElementById('simplificationPanel');
+                if (data.enabled) {
+                    panel.classList.add('visible');
+                    showToast('📚 Textvereinfachung aktiviert', 'info');
+                } else {
+                    panel.classList.remove('visible');
+                    showOriginalText();
+                    showToast('📚 Textvereinfachung deaktiviert', 'info');
+                }
+            });
+            
+            // Tasks released by teacher
+            socket.on('tasks_released', (data) => {
+                document.getElementById('tasksBtn').style.display = 'block';
+                sessionStorage.setItem('leseassistent_tasks', JSON.stringify(data.tasks || []));
+                showToast('📝 Aufgaben vom Lehrer freigegeben!', 'success');
+            });
+            
+            // Translation events
+            socket.on('translation_request_sent', (data) => {
+                translationRequestPending = true;
+                updateTranslationStatus('pending', `⏳ Anfrage für ${data.language_name} gesendet. Warte auf Genehmigung vom Lehrer...`);
+            });
+            
+            socket.on('translation_approved', (data) => {
+                translationRequestPending = false;
+                if (data.translated_text) {
+                    updateTranslationStatus('approved', `✅ Übersetzung genehmigt!`);
+                    showTranslationPanel(data.language_name, data.translated_text, data.layout || 'side-by-side');
+                    showToast('🌍 Übersetzung erhalten!', 'success');
+                } else {
+                    updateTranslationStatus('approved', `✅ Genehmigt, aber keine automatische Übersetzung verfügbar.`);
+                }
+            });
+            
+            socket.on('translation_denied', (data) => {
+                translationRequestPending = false;
+                updateTranslationStatus('denied', `❌ Anfrage abgelehnt.`);
+                setTimeout(() => resetTranslationState(), 3000);
+                showToast('Übersetzungsanfrage abgelehnt', 'error');
+            });
+        }
+
+        // =============================================================================
+        // TRANSLATION REQUEST SYSTEM
+        // =============================================================================
+
+        function requestTranslation(language, buttonElement) {
+            if (!sessionCode) {
+                showToast('Bitte zuerst einer Session beitreten', 'error');
+                return;
+            }
+            
+            if (translationRequestPending) {
+                showToast('Anfrage läuft bereits...', 'info');
+                return;
+            }
+            
+            // Update button state
+            document.querySelectorAll('.lang-btn').forEach(b => {
+                b.classList.remove('selected', 'pending', 'approved');
+            });
+            buttonElement.classList.add('pending');
+            selectedLanguage = language;
+            
+            // Send request to server
+            socket.emit('student_request_translation', {
+                code: sessionCode,
+                language: language
+            });
+        }
+
+        function updateTranslationStatus(status, message) {
+            const statusDiv = document.getElementById('translationStatus');
+            const statusText = document.getElementById('translationStatusText');
+            
+            statusDiv.className = 'translation-status ' + status;
+            statusText.textContent = message;
+            
+            // Update button state
+            if (status === 'approved') {
+                document.querySelectorAll('.lang-btn').forEach(b => {
+                    if (b.classList.contains('pending')) {
+                        b.classList.remove('pending');
+                        b.classList.add('approved');
+                    }
+                });
+            }
+        }
+
+        function resetTranslationState() {
+            translationRequestPending = false;
+            selectedLanguage = null;
+            currentTranslatedText = '';
+            currentTranslationLanguage = '';
+            
+            document.querySelectorAll('.lang-btn').forEach(b => {
+                b.classList.remove('selected', 'pending', 'approved');
+            });
+            
+            document.getElementById('translationStatus').className = 'translation-status';
+            closeBilingualView();
+        }
+
+        function showTranslationPanel(languageName, translatedText, layout = 'side-by-side') {
+            // Store translation data
+            currentTranslatedText = translatedText;
+            currentTranslationLanguage = selectedLanguage;
+            
+            // Show bilingual view instead of old panel
+            showBilingualView(languageName, translatedText, layout);
+        }
+
+        function showBilingualView(languageName, translatedText, layout = 'side-by-side') {
+            const view = document.getElementById('bilingualView');
+            const translationColumn = document.querySelector('.bilingual-column.translation');
+            const translationTextDiv = document.getElementById('translationBilingualText');
+            
+            // Remove previous layout classes
+            view.classList.remove('layout-side-by-side', 'layout-stacked', 'layout-translation-only');
+            
+            // Apply layout class
+            view.classList.add('layout-' + layout);
+            
+            // Update header based on layout
+            const headerTitle = document.querySelector('.bilingual-title');
+            if (layout === 'translation-only') {
+                headerTitle.textContent = '📖 Übersetzung';
+            } else if (layout === 'stacked') {
+                headerTitle.textContent = '📚 Zweisprachige Ansicht (untereinander)';
+            } else {
+                headerTitle.textContent = '📚 Zweisprachige Ansicht';
+            }
+            
+            // Set flag and title
+            const flagImg = document.getElementById('translationFlag');
+            const title = document.getElementById('translationColumnTitle');
+            
+            flagImg.src = languageFlags[selectedLanguage] || '';
+            title.textContent = languageNames[selectedLanguage] || languageName;
+            
+            // Check if RTL language (Arabic, Hebrew, etc.)
+            const rtlLanguages = ['ar', 'he', 'fa', 'ur'];  // Arabic, Hebrew, Persian, Urdu
+            const isRTL = rtlLanguages.includes(selectedLanguage);
+            
+            // Apply RTL styling if needed
+            if (isRTL) {
+                translationColumn.classList.add('rtl');
+                translationTextDiv.classList.add('rtl');
+            } else {
+                translationColumn.classList.remove('rtl');
+                translationTextDiv.classList.remove('rtl');
+            }
+            
+            // Render original text with word spans (even if hidden, needed for side-by-side toggle)
+            renderBilingualText('originalBilingualText', currentText, false);
+            
+            // Render translated text with word spans
+            renderBilingualText('translationBilingualText', translatedText, isRTL);
+            
+            // Show the view
+            view.classList.add('visible');
+            
+            // Scroll into view
+            view.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function renderBilingualText(elementId, text, isRTL = false) {
+            const container = document.getElementById(elementId);
+            container.innerHTML = '';
+            
+            // Split text into words - same logic as processWordTimings
+            // Split on whitespace but keep words together
+            const words = text.split(/\s+/).filter(w => w.length > 0);
+            
+            words.forEach((word, index) => {
+                const span = document.createElement('span');
+                span.className = 'word';
+                span.textContent = word;
+                span.dataset.index = index;
+                container.appendChild(span);
+                
+                // Add space after word (except last)
+                if (index < words.length - 1) {
+                    container.appendChild(document.createTextNode(' '));
+                }
+            });
+        }
+
+        function closeBilingualView() {
+            const view = document.getElementById('bilingualView');
+            view.classList.remove('visible');
+            
+            // Reset layout classes
+            view.classList.remove('layout-side-by-side', 'layout-stacked', 'layout-translation-only');
+            
+            // Reset RTL classes
+            document.querySelector('.bilingual-column.translation').classList.remove('rtl');
+            document.getElementById('translationBilingualText').classList.remove('rtl');
+            
+            // Stop any playing audio
+            stopOriginalBilingualAudio();
+            stopTranslationAudio();
+        }
+
+        // =============================================================================
+        // BILINGUAL AUDIO PLAYBACK
+        // =============================================================================
+
+        async function playOriginalAudio() {
+            const btn = document.getElementById('originalPlayBtn');
+            
+            if (isPlaying) {
+                // Pause
+                stopOriginalBilingualAudio();
+                btn.textContent = '▶';
+                return;
+            }
+            
+            btn.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-width:2px;"></span>';
+            btn.classList.add('playing');
+            
+            try {
+                // Use existing TTS function logic
+                const response = await fetch(`${API_BASE_URL}/api/tts`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: currentText,
+                        session_code: sessionCode
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.audio_base64 && data.alignment) {
+                    btn.textContent = '⏸';
+                    
+                    // Process word timings for original text (pass whole alignment object)
+                    const originalTimings = processWordTimings(data.alignment, currentText);
+                    
+                    // Play audio with highlighting
+                    await playBilingualAudioWithHighlight(
+                        data.audio_base64,
+                        originalTimings,
+                        'originalBilingualText',
+                        'originalProgressBar',
+                        'originalTime',
+                        'original'
+                    );
+                } else {
+                    showToast('Audio nicht verfügbar', 'error');
+                }
+            } catch (error) {
+                console.error('Original audio error:', error);
+                showToast('Audio-Fehler', 'error');
+            }
+            
+            btn.textContent = '▶';
+            btn.classList.remove('playing');
+        }
+
+        async function playTranslationAudio() {
+            const btn = document.getElementById('translationPlayBtn');
+            
+            if (isTranslationPlaying) {
+                stopTranslationAudio();
+                btn.textContent = '▶';
+                return;
+            }
+            
+            btn.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-width:2px;"></span>';
+            btn.classList.add('playing');
+            
+            try {
+                // Get TTS for translation - include language code for correct pronunciation
+                const response = await fetch(`${API_BASE_URL}/api/tts`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: currentTranslatedText,
+                        session_code: sessionCode,
+                        language_code: selectedLanguage || 'en'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                // Check for errors
+                if (!response.ok || data.error) {
+                    console.error('Translation TTS error:', data.error || response.status);
+                    showToast('Audio nicht verfügbar: ' + (data.error || 'Fehler ' + response.status), 'error');
+                    btn.textContent = '▶';
+                    btn.classList.remove('playing');
+                    return;
+                }
+                
+                if (data.audio_base64 && data.alignment) {
+                    btn.textContent = '⏸';
+                    
+                    // Process word timings for translated text (pass whole alignment object)
+                    translationWordTimings = processWordTimings(data.alignment, currentTranslatedText);
+                    
+                    // Play audio with highlighting
+                    await playBilingualAudioWithHighlight(
+                        data.audio_base64,
+                        translationWordTimings,
+                        'translationBilingualText',
+                        'translationProgressBar',
+                        'translationTime',
+                        'translation'
+                    );
+                } else {
+                    showToast('Audio nicht verfügbar', 'error');
+                }
+            } catch (error) {
+                console.error('Translation audio error:', error);
+                showToast('Audio-Fehler', 'error');
+            }
+            
+            btn.textContent = '▶';
+            btn.classList.remove('playing');
+        }
+
+        function processWordTimings(alignment, text) {
+            const timings = [];
+            const characters = alignment.characters || [];
+            const charStartTimes = alignment.character_start_times_seconds || [];
+            const charEndTimes = alignment.character_end_times_seconds || [];
+            
+            let currentWord = '';
+            let wordStart = 0;
+            let wordEnd = 0;
+            
+            for (let i = 0; i < characters.length; i++) {
+                const char = characters[i];
+                // Check for ANY whitespace (space, newline, tab, etc.)
+                const isWhitespace = /\s/.test(char);
+                
+                if (isWhitespace || i === characters.length - 1) {
+                    // If it's the last character and NOT whitespace, append it
+                    if (i === characters.length - 1 && !isWhitespace) {
+                        currentWord += char;
+                        wordEnd = charEndTimes[i] || wordEnd;
+                    }
+                    
+                    if (currentWord.trim()) {
+                        timings.push({
+                            word: currentWord.trim(),
+                            start: wordStart,
+                            end: wordEnd
+                        });
+                    }
+                    
+                    currentWord = '';
+                    if (i < characters.length - 1) {
+                        wordStart = charStartTimes[i + 1] || 0;
+                    }
+                } else {
+                    if (currentWord === '') {
+                        wordStart = charStartTimes[i] || 0;
+                    }
+                    currentWord += char;
+                    wordEnd = charEndTimes[i] || wordEnd;
+                }
+            }
+            
+            console.log('Word timings generated:', timings.length, 'words', timings.slice(0, 3));
+            return timings;
+        }
+
+        async function playBilingualAudioWithHighlight(audioBase64, timings, textElementId, progressBarId, timeId, type) {
+            const audioData = atob(audioBase64);
+            const audioArray = new Uint8Array(audioData.length);
+            for (let i = 0; i < audioData.length; i++) {
+                audioArray[i] = audioData.charCodeAt(i);
+            }
+            
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const buffer = await ctx.decodeAudioData(audioArray.buffer);
+            const source = ctx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(ctx.destination);
+            
+            const duration = buffer.duration;
+            const audioStartTime = ctx.currentTime;
+            
+            if (type === 'original') {
+                isPlaying = true;
+            } else {
+                isTranslationPlaying = true;
+            }
+            
+            source.start(0);
+            
+            // Update progress and highlighting
+            const textElement = document.getElementById(textElementId);
+            const progressBar = document.getElementById(progressBarId);
+            const timeDisplay = document.getElementById(timeId);
+            const wordSpans = textElement.querySelectorAll('.word');
+            
+            console.log(`Playing ${type}: ${wordSpans.length} word spans, ${timings.length} timings`);
+            
+            let lastHighlightedIndex = -1;
+            
+            const updateFrame = () => {
+                const currentTime = ctx.currentTime - audioStartTime;
+                const progress = (currentTime / duration) * 100;
+                
+                progressBar.style.width = Math.min(progress, 100) + '%';
+                timeDisplay.textContent = formatTime(currentTime) + ' / ' + formatTime(duration);
+                
+                // Highlight current word based on timing (timings are in SECONDS)
+                // Find current word index
+                let currentWordIndex = -1;
+                for (let i = 0; i < timings.length; i++) {
+                    if (currentTime >= timings[i].start && currentTime <= timings[i].end) {
+                        currentWordIndex = i;
+                        break;
+                    }
+                }
+                
+                // Update highlighting only if word changed
+                if (currentWordIndex !== lastHighlightedIndex) {
+                    wordSpans.forEach((span, index) => {
+                        if (index === currentWordIndex) {
+                            span.classList.add('highlight');
+                        } else {
+                            span.classList.remove('highlight');
+                        }
+                    });
+                    lastHighlightedIndex = currentWordIndex;
+                }
+                
+                const isStillPlaying = (type === 'original' && isPlaying) || (type === 'translation' && isTranslationPlaying);
+                
+                if (isStillPlaying && currentTime < duration) {
+                    requestAnimationFrame(updateFrame);
+                } else if (currentTime >= duration) {
+                    // Finished
+                    if (type === 'original') {
+                        isPlaying = false;
+                        document.getElementById('originalPlayBtn').textContent = '▶';
+                        document.getElementById('originalPlayBtn').classList.remove('playing');
+                    } else {
+                        isTranslationPlaying = false;
+                        document.getElementById('translationPlayBtn').textContent = '▶';
+                        document.getElementById('translationPlayBtn').classList.remove('playing');
+                    }
+                    wordSpans.forEach(span => span.classList.remove('highlight'));
+                    progressBar.style.width = '100%';
+                }
+            };
+            
+            requestAnimationFrame(updateFrame);
+            
+            // Wait for audio to finish
+            return new Promise(resolve => {
+                source.onended = resolve;
+            });
+        }
+
+        function stopOriginalBilingualAudio() {
+            isPlaying = false;
+            document.getElementById('originalPlayBtn').textContent = '▶';
+            document.getElementById('originalPlayBtn').classList.remove('playing');
+            document.querySelectorAll('#originalBilingualText .word').forEach(span => {
+                span.classList.remove('highlight');
+            });
+        }
+
+        function stopTranslationAudio() {
+            isTranslationPlaying = false;
+            document.getElementById('translationPlayBtn').textContent = '▶';
+            document.getElementById('translationPlayBtn').classList.remove('playing');
+            document.querySelectorAll('#translationBilingualText .word').forEach(span => {
+                span.classList.remove('highlight');
+            });
+        }
+
+        function toggleSyncMode() {
+            syncModeEnabled = document.getElementById('syncModeCheckbox').checked;
+            if (syncModeEnabled) {
+                showToast('🔗 Sync-Modus aktiviert', 'info');
+            }
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function closeTranslationPanel() {
+            closeBilingualView();
+        }
+
+        // =============================================================================
+        // SESSION JOIN
+        // =============================================================================
+
+        function joinSession() {
+            const code = document.getElementById('sessionCodeInput').value.trim().toUpperCase();
+            
+            if (code.length !== 6) {
+                showToast('Bitte 6-stelligen Code eingeben', 'error');
+                return;
+            }
+
+            socket.emit('student_join_session', {
+                code: code,
+                name: 'Schüler'
+            });
+        }
+
+        function showReadingPhase() {
+            document.getElementById('phaseJoin').classList.remove('active');
+            document.getElementById('phaseReading').classList.add('active');
+        }
+
+        // =============================================================================
+        // TEXT DISPLAY WITH WORD HIGHLIGHTING
+        // =============================================================================
+
+        function displayText(text) {
+            currentText = text;
+            document.getElementById('waitingMessage').style.display = 'none';
+            document.getElementById('readingContent').style.display = 'block';
+            
+            // Display text with clickable words
+            displayTextWithWords(text);
+            
+            // Store for other pages
+            sessionStorage.setItem('leseassistent_text', text);
+            sessionStorage.setItem('leseassistent_session_code', sessionCode);
+            
+            // Generate TTS with timestamps
+            generateTTS(text);
+        }
+
+        function displayTextWithWords(text) {
+            const container = document.getElementById('readingText');
+            container.innerHTML = '';
+            
+            const words = text.split(/(\s+)/);
+            let wordIndex = 0;
+            let sentenceIndex = 0;
+            
+            words.forEach(part => {
+                if (part.match(/\s+/)) {
+                    container.appendChild(document.createTextNode(part));
+                } else if (part.length > 0) {
+                    const span = document.createElement('span');
+                    span.className = 'word';
+                    
+                    // Apply syllables if enabled
+                    if (a11ySettings.syllables) {
+                        span.textContent = syllabify(part);
+                    } else {
+                        span.textContent = part;
+                    }
+                    
+                    span.dataset.index = wordIndex++;
+                    span.dataset.sentence = sentenceIndex;
+                    
+                    // Track sentence boundaries
+                    if (part.match(/[.!?]$/)) {
+                        sentenceIndex++;
+                    }
+                    
+                    // Click for word info (vocabulary system)
+                    span.addEventListener('click', () => showWordInfo(part));
+                    
+                    container.appendChild(span);
+                }
+            });
+            
+            // Add reading ruler if enabled
+            if (a11ySettings.ruler) {
+                toggleReadingRuler(true);
+            }
+        }
+
+        // =============================================================================
+        // TTS WITH WORD TIMESTAMPS
+        // =============================================================================
+
+        async function generateTTS(text) {
+            const playBtn = document.getElementById('playBtn');
+            playBtn.disabled = true;
+            playBtn.innerHTML = '<span class="spinner"></span>';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/tts`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_code: sessionCode,
+                        text: text
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'TTS-Fehler');
+                }
+                
+                // Parse word timings from alignment
+                if (data.alignment) {
+                    wordTimings = [];
+                    const characters = data.alignment.characters || [];
+                    const charStartTimes = data.alignment.character_start_times_seconds || [];
+                    const charEndTimes = data.alignment.character_end_times_seconds || [];
+                    
+                    let currentWord = '';
+                    let wordStart = 0;
+                    let wordEnd = 0;
+                    
+                    for (let i = 0; i < characters.length; i++) {
+                        const char = characters[i];
+                        
+                        // Check for ANY whitespace (space, newline, tab, etc.)
+                        // This fixes the synchronization issue with paragraphs
+                        const isWhitespace = /\s/.test(char);
+                        
+                        if (isWhitespace || i === characters.length - 1) {
+                            // If it's the last character and NOT whitespace, append it
+                            if (i === characters.length - 1 && !isWhitespace) {
+                                currentWord += char;
+                                wordEnd = charEndTimes[i] || wordEnd;
+                            }
+                            
+                            if (currentWord.trim()) {
+                                wordTimings.push({
+                                    word: currentWord.trim(),
+                                    start: wordStart,
+                                    end: wordEnd
+                                });
+                            }
+                            
+                            currentWord = '';
+                            if (i < characters.length - 1) {
+                                wordStart = charStartTimes[i + 1] || 0;
+                            }
+                        } else {
+                            if (currentWord === '') {
+                                wordStart = charStartTimes[i] || 0;
+                            }
+                            currentWord += char;
+                            wordEnd = charEndTimes[i] || wordEnd;
+                        }
+                    }
+                }
+                
+                // Decode and load audio
+                const audioBytes = Uint8Array.from(atob(data.audio_base64), c => c.charCodeAt(0));
+                
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                
+                audioBuffer = await audioContext.decodeAudioData(audioBytes.buffer);
+                
+                // Update UI
+                document.getElementById('totalTime').textContent = formatTime(audioBuffer.duration);
+                playBtn.disabled = false;
+                playBtn.textContent = '▶️';
+                
+            } catch (error) {
+                console.error('TTS Error:', error);
+                showToast(`Audio-Fehler: ${error.message}`, 'error');
+                playBtn.disabled = false;
+                playBtn.textContent = '▶️';
+            }
+        }
+
+        // =============================================================================
+        // AUDIO PLAYBACK WITH WORD HIGHLIGHTING
+        // =============================================================================
+
+        function togglePlayback() {
+            if (isPlaying) {
+                pauseAudio();
+            } else {
+                playAudio();
+            }
+        }
+
+        function playAudio() {
+            if (!audioBuffer) return;
+            
+            // Resume AudioContext if suspended (iOS)
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+            
+            audioSource = audioContext.createBufferSource();
+            audioSource.buffer = audioBuffer;
+            audioSource.playbackRate.value = parseFloat(document.getElementById('playbackSpeed').value);
+            audioSource.connect(audioContext.destination);
+            
+            audioSource.onended = () => {
+                if (isPlaying) {
+                    stopAudio();
+                }
+            };
+            
+            const offset = pauseTime;
+            startTime = audioContext.currentTime - offset;
+            audioSource.start(0, offset);
+            
+            isPlaying = true;
+            document.getElementById('playBtn').textContent = '⏸️';
+            
+            updateHighlighting();
+        }
+
+        function pauseAudio() {
+            if (!isPlaying) return;
+            
+            const playbackRate = parseFloat(document.getElementById('playbackSpeed').value);
+            pauseTime = (audioContext.currentTime - startTime) * playbackRate;
+            
+            audioSource.stop();
+            isPlaying = false;
+            
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            
+            document.getElementById('playBtn').textContent = '▶️';
+        }
+
+        function stopAudio() {
+            if (audioSource) {
+                try { audioSource.stop(); } catch(e) {}
+            }
+            
+            isPlaying = false;
+            pauseTime = 0;
+            
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+            }
+            
+            document.getElementById('playBtn').textContent = '▶️';
+            document.getElementById('progressFill').style.width = '0%';
+            document.getElementById('currentTime').textContent = '0:00';
+            
+            // Remove highlights
+            document.querySelectorAll('.word').forEach(w => {
+                w.classList.remove('active', 'spoken', 'focus-sentence');
+            });
+        }
+
+        function updateHighlighting() {
+            if (!isPlaying || !audioBuffer) return;
+            
+            const playbackRate = parseFloat(document.getElementById('playbackSpeed').value);
+            const currentTime = (audioContext.currentTime - startTime) * playbackRate;
+            
+            // Update progress bar
+            const progress = (currentTime / audioBuffer.duration) * 100;
+            document.getElementById('progressFill').style.width = `${Math.min(progress, 100)}%`;
+            document.getElementById('currentTime').textContent = formatTime(currentTime);
+            
+            // Update word highlighting
+            const wordElements = document.querySelectorAll('.word');
+            let activeElement = null;
+            let activeSentence = null;
+            
+            wordTimings.forEach((timing, index) => {
+                const element = wordElements[index];
+                if (!element) return;
+                
+                if (currentTime >= timing.start && currentTime <= timing.end) {
+                    element.classList.add('active');
+                    element.classList.add('spoken');
+                    activeElement = element;
+                    activeSentence = element.dataset.sentence;
+                    
+                    // Scroll into view if needed
+                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                } else if (currentTime > timing.end) {
+                    element.classList.remove('active');
+                    element.classList.add('spoken');
+                } else {
+                    element.classList.remove('active', 'spoken');
+                }
+                
+                // Focus mode - highlight same sentence words
+                if (a11ySettings.focusMode && activeSentence !== null) {
+                    if (element.dataset.sentence === activeSentence) {
+                        element.classList.add('focus-sentence');
+                    } else {
+                        element.classList.remove('focus-sentence');
+                    }
+                }
+            });
+            
+            // Update reading ruler position
+            if (activeElement) {
+                updateReadingRuler(activeElement);
+            }
+            
+            animationFrameId = requestAnimationFrame(updateHighlighting);
+        }
+
+        function seekAudio(event) {
+            if (!audioBuffer) return;
+            
+            const progressBar = event.currentTarget;
+            const rect = progressBar.getBoundingClientRect();
+            const clickX = event.clientX - rect.left;
+            const percentage = clickX / rect.width;
+            
+            const wasPlaying = isPlaying;
+            if (isPlaying) {
+                pauseAudio();
+            }
+            
+            pauseTime = percentage * audioBuffer.duration;
+            
+            if (wasPlaying) {
+                playAudio();
+            } else {
+                document.getElementById('progressFill').style.width = `${percentage * 100}%`;
+                document.getElementById('currentTime').textContent = formatTime(pauseTime);
+            }
+        }
+
+        function changePlaybackSpeed() {
+            if (isPlaying) {
+                audioSource.playbackRate.value = parseFloat(document.getElementById('playbackSpeed').value);
+            }
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // =============================================================================
+        // ACCESSIBILITY FEATURES (Received from Teacher)
+        // =============================================================================
+
+        function applySettings(settings) {
+            a11ySettings = { ...a11ySettings, ...settings };
+            
+            // Apply font
+            let fontFamily;
+            switch(settings.font) {
+                case 'dyslexic':
+                    fontFamily = "'OpenDyslexic', sans-serif";
+                    break;
+                case 'sans':
+                    fontFamily = "'Nunito', sans-serif";
+                    break;
+                default:
+                    fontFamily = "'Merriweather', serif";
+            }
+            document.documentElement.style.setProperty('--reading-font', fontFamily);
+            
+            // Apply spacing
+            document.documentElement.style.setProperty('--reading-line-height', settings.lineHeight);
+            document.documentElement.style.setProperty('--reading-letter-spacing', settings.letterSpacing + 'em');
+            document.documentElement.style.setProperty('--reading-word-spacing', settings.wordSpacing + 'em');
+            
+            // Apply focus mode
+            const readingText = document.getElementById('readingText');
+            readingText.classList.toggle('focus-mode', settings.focusMode);
+            readingText.classList.toggle('show-ruler', settings.ruler);
+            
+            // Re-render text if syllables changed
+            if (currentText) {
+                displayTextWithWords(currentText);
+            }
+        }
+
+        function toggleFocusMode(enabled) {
+            const readingText = document.getElementById('readingText');
+            readingText.classList.toggle('focus-mode', enabled);
+            a11ySettings.focusMode = enabled;
+        }
+
+        function toggleReadingRuler(enabled) {
+            const readingText = document.getElementById('readingText');
+            readingText.classList.toggle('show-ruler', enabled);
+            a11ySettings.ruler = enabled;
+        }
+
+        function updateReadingRuler(activeWord) {
+            if (!a11ySettings.ruler) return;
+            
+            const ruler = document.querySelector('.reading-ruler');
+            if (!ruler || !activeWord) return;
+            
+            const rect = activeWord.getBoundingClientRect();
+            const containerRect = document.getElementById('readingText').getBoundingClientRect();
+            ruler.style.top = (rect.bottom - containerRect.top + 5) + 'px';
+        }
+
+        // German syllable rules (simplified)
+        function syllabify(word) {
+            if (word.length <= 3) return word;
+            
+            const vowels = 'aeiouäöüAEIOUÄÖÜ';
+            const result = [];
+            let currentSyllable = '';
+            let lastWasVowel = false;
+            
+            for (let i = 0; i < word.length; i++) {
+                const char = word[i];
+                const isVowel = vowels.includes(char);
+                
+                currentSyllable += char;
+                
+                if (lastWasVowel && !isVowel && i < word.length - 1) {
+                    let lookAhead = i + 1;
+                    while (lookAhead < word.length && !vowels.includes(word[lookAhead])) {
+                        lookAhead++;
+                    }
+                    
+                    if (lookAhead < word.length && currentSyllable.length > 1) {
+                        const consonantsToMove = lookAhead - i - 1;
+                        if (consonantsToMove > 0 && currentSyllable.length > 2) {
+                            result.push(currentSyllable.slice(0, -1));
+                            currentSyllable = currentSyllable.slice(-1);
+                        }
+                    }
+                }
+                
+                lastWasVowel = isVowel;
+            }
+            
+            if (currentSyllable) {
+                result.push(currentSyllable);
+            }
+            
+            const merged = [];
+            for (let i = 0; i < result.length; i++) {
+                if (result[i].length === 1 && !vowels.includes(result[i]) && merged.length > 0) {
+                    merged[merged.length - 1] += result[i];
+                } else if (result[i].length === 1 && !vowels.includes(result[i]) && i < result.length - 1) {
+                    result[i + 1] = result[i] + result[i + 1];
+                } else {
+                    merged.push(result[i]);
+                }
+            }
+            
+            return merged.length > 1 ? merged.join('·') : word;
+        }
+
+        // =============================================================================
+        // WORD INFO & VOCABULARY SYSTEM
+        // =============================================================================
+
+        async function showWordInfo(word) {
+            // Wort bereinigen
+            const cleanWord = word.replace(/[^\w\säöüÄÖÜß-]/g, '').trim();
+            if (!cleanWord) return;
+            
+            // Modal öffnen mit Ladezustand
+            document.getElementById('wordInfoTitle').textContent = cleanWord;
+            document.getElementById('wordInfoMeta').textContent = 'Lädt...';
+            document.getElementById('wordInfoExplanation').textContent = 'Informationen werden geladen...';
+            document.getElementById('wordInfoImageLoading').style.display = 'block';
+            document.getElementById('wordInfoImage').style.display = 'none';
+            document.getElementById('wordInfoNoImage').style.display = 'none';
+            document.getElementById('wordInfoExampleSection').style.display = 'none';
+            document.getElementById('wordInfoTranslationSection').style.display = 'none';
+            document.getElementById('addToVocabBtn').disabled = true;
+            document.getElementById('wordInfoOverlay').classList.add('visible');
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/word-info`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        word: cleanWord,
+                        session_code: sessionCode,
+                        target_language: selectedLanguage || ''
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                // Daten speichern für Wortliste
+                currentWordInfo = data;
+                
+                // Titel und Meta
+                document.getElementById('wordInfoTitle').textContent = data.word || cleanWord;
+                
+                // Meta-Info (Wortart, Artikel)
+                let metaParts = [];
+                if (data.article) metaParts.push(data.article);
+                if (data.word_type) metaParts.push(data.word_type);
+                if (data.syllables) metaParts.push(`Silben: ${data.syllables}`);
+                document.getElementById('wordInfoMeta').textContent = metaParts.join(' • ') || '';
+                
+                // Erklärung
+                document.getElementById('wordInfoExplanation').textContent = 
+                    data.simple_explanation || 'Keine Erklärung verfügbar';
+                
+                // Beispielsatz
+                if (data.example_sentence) {
+                    document.getElementById('wordInfoExample').textContent = data.example_sentence;
+                    document.getElementById('wordInfoExampleSection').style.display = 'block';
+                }
+                
+                // Übersetzung
+                if (data.translation && selectedLanguage) {
+                    document.getElementById('wordInfoTranslation').textContent = data.translation;
+                    document.getElementById('wordInfoTranslationFlag').src = languageFlags[selectedLanguage] || '';
+                    document.getElementById('wordInfoTranslationSection').style.display = 'block';
+                }
+                
+                // Bild
+                document.getElementById('wordInfoImageLoading').style.display = 'none';
+                if (data.image && data.image.image_base64) {
+                    const imgEl = document.getElementById('wordInfoImage');
+                    imgEl.src = `data:${data.image.mime_type || 'image/png'};base64,${data.image.image_base64}`;
+                    imgEl.style.display = 'block';
+                } else if (data.image && data.image.image_url) {
+                    const imgEl = document.getElementById('wordInfoImage');
+                    imgEl.src = data.image.image_url;
+                    imgEl.style.display = 'block';
+                } else {
+                    document.getElementById('wordInfoNoImage').style.display = 'block';
+                }
+                
+                // Button aktivieren
+                document.getElementById('addToVocabBtn').disabled = false;
+                
+                // Prüfen ob Wort schon in Liste
+                updateAddToVocabButton();
+                
+            } catch (error) {
+                console.error('Word info error:', error);
+                document.getElementById('wordInfoExplanation').textContent = 
+                    'Fehler beim Laden der Informationen. Bitte versuche es erneut.';
+                document.getElementById('wordInfoImageLoading').style.display = 'none';
+                document.getElementById('wordInfoNoImage').style.display = 'block';
+            }
+        }
+
+        function closeWordInfo() {
+            document.getElementById('wordInfoOverlay').classList.remove('visible');
+            currentWordInfo = null;
+        }
+
+        function closeWordInfoOnOverlay(event) {
+            if (event.target === event.currentTarget) {
+                closeWordInfo();
+            }
+        }
+
+        function updateAddToVocabButton() {
+            const btn = document.getElementById('addToVocabBtn');
+            if (currentWordInfo && isWordInVocab(currentWordInfo.word)) {
+                btn.textContent = '✅ In Wortliste';
+                btn.disabled = true;
+            } else {
+                btn.textContent = '➕ Zur Wortliste';
+                btn.disabled = false;
+            }
+        }
+
+        function isWordInVocab(word) {
+            return vocabularyList.some(item => 
+                item.word.toLowerCase() === word.toLowerCase()
+            );
+        }
+
+        async function playWordAudio() {
+            if (!currentWordInfo) return;
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/tts`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: currentWordInfo.word,
+                        session_code: sessionCode
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.audio_base64) {
+                    const audioData = atob(data.audio_base64);
+                    const audioArray = new Uint8Array(audioData.length);
+                    for (let i = 0; i < audioData.length; i++) {
+                        audioArray[i] = audioData.charCodeAt(i);
+                    }
+                    
+                    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    const buffer = await ctx.decodeAudioData(audioArray.buffer);
+                    const source = ctx.createBufferSource();
+                    source.buffer = buffer;
+                    source.connect(ctx.destination);
+                    source.start(0);
+                }
+            } catch (error) {
+                console.error('Word audio error:', error);
+            }
+        }
+
+        // --- Vocabulary List Functions ---
+
+        function loadVocabularyFromStorage() {
+            try {
+                const stored = localStorage.getItem(VOCAB_STORAGE_KEY);
+                if (stored) {
+                    vocabularyList = JSON.parse(stored);
+                }
+            } catch (e) {
+                console.error('Error loading vocabulary:', e);
+                vocabularyList = [];
+            }
+            updateVocabUI();
+        }
+
+        function saveVocabularyToStorage() {
+            try {
+                localStorage.setItem(VOCAB_STORAGE_KEY, JSON.stringify(vocabularyList));
+            } catch (e) {
+                console.error('Error saving vocabulary:', e);
+            }
+            updateVocabUI();
+        }
+
+        function addCurrentWordToVocab() {
+            if (!currentWordInfo) return;
+            
+            // Prüfen ob schon vorhanden
+            if (isWordInVocab(currentWordInfo.word)) {
+                showToast('Wort ist bereits in der Liste', 'info');
+                return;
+            }
+            
+            // Zur Liste hinzufügen
+            vocabularyList.push({
+                word: currentWordInfo.word,
+                article: currentWordInfo.article || '',
+                translation: currentWordInfo.translation || '',
+                explanation: currentWordInfo.simple_explanation || '',
+                example: currentWordInfo.example_sentence || '',
+                language: selectedLanguage || '',
+                addedAt: new Date().toISOString()
+            });
+            
+            saveVocabularyToStorage();
+            updateAddToVocabButton();
+            showToast('✅ Wort zur Liste hinzugefügt!', 'success');
+        }
+
+        function removeFromVocab(index) {
+            vocabularyList.splice(index, 1);
+            saveVocabularyToStorage();
+            renderVocabList();
+        }
+
+        function updateVocabUI() {
+            const count = vocabularyList.length;
+            const btn = document.getElementById('vocabListBtn');
+            const badge = document.getElementById('vocabCountBadge');
+            
+            badge.textContent = count;
+            
+            if (count > 0) {
+                btn.classList.add('has-words');
+            } else {
+                btn.classList.remove('has-words');
+            }
+        }
+
+        function openVocabList() {
+            renderVocabList();
+            document.getElementById('vocabListOverlay').classList.add('visible');
+        }
+
+        function closeVocabList() {
+            document.getElementById('vocabListOverlay').classList.remove('visible');
+        }
+
+        function closeVocabListOnOverlay(event) {
+            if (event.target === event.currentTarget) {
+                closeVocabList();
+            }
+        }
+
+        function renderVocabList() {
+            const container = document.getElementById('vocabListContent');
+            
+            // Clear container except for rebuilding
+            container.innerHTML = '';
+            
+            if (vocabularyList.length === 0) {
+                // Show empty message
+                const emptyDiv = document.createElement('div');
+                emptyDiv.className = 'vocab-list-empty';
+                emptyDiv.innerHTML = `
+                    Noch keine Wörter gespeichert.<br>
+                    <small>Tippe auf ein Wort im Text und füge es zur Liste hinzu!</small>
+                `;
+                container.appendChild(emptyDiv);
+                return;
+            }
+            
+            // Render vocabulary items
+            vocabularyList.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = 'vocab-item';
+                
+                const wordText = item.article ? `${item.article} ${item.word}` : item.word;
+                
+                div.innerHTML = `
+                    <span class="vocab-item-word">${wordText}</span>
+                    <span class="vocab-item-translation">${item.translation || ''}</span>
+                    <button class="vocab-item-remove" onclick="removeFromVocab(${index})" title="Entfernen">✕</button>
+                `;
+                
+                container.appendChild(div);
+            });
+        }
+
+        function clearVocabList() {
+            if (vocabularyList.length === 0) return;
+            
+            if (confirm('Möchtest du wirklich alle Wörter aus der Liste löschen?')) {
+                vocabularyList = [];
+                saveVocabularyToStorage();
+                renderVocabList();
+                showToast('Wortliste geleert', 'info');
+            }
+        }
+
+        async function exportVocabList() {
+            if (vocabularyList.length === 0) {
+                showToast('Keine Wörter zum Exportieren', 'info');
+                return;
+            }
+            
+            // Einfacher HTML-Export als druckbare Seite
+            const html = generateVocabHTML();
+            const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            
+            // Neues Fenster zum Drucken öffnen
+            const printWindow = window.open(url, '_blank');
+            if (printWindow) {
+                printWindow.onload = () => {
+                    setTimeout(() => {
+                        printWindow.print();
+                    }, 500);
+                };
+            }
+            
+            showToast('📄 Wortliste wird geöffnet...', 'success');
+        }
+
+        function generateVocabHTML() {
+            const date = new Date().toLocaleDateString('de-DE');
+            
+            let tableRows = vocabularyList.map((item, index) => {
+                const wordText = item.article ? `${item.article} ${item.word}` : item.word;
+                return `
+                    <tr>
+                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">${wordText}</td>
+                        <td style="padding: 8px; border: 1px solid #ddd;">${item.translation || '-'}</td>
+                        <td style="padding: 8px; border: 1px solid #ddd; font-size: 0.9em;">${item.explanation || '-'}</td>
+                    </tr>
+                `;
+            }).join('');
+            
+            return `
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Meine Wortliste - LeseAssistent</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #4F46E5;
+            border-bottom: 3px solid #4F46E5;
+            padding-bottom: 10px;
+        }
+        .meta {
+            color: #666;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th {
+            background: #4F46E5;
+            color: white;
+            padding: 12px 8px;
+            text-align: left;
+        }
+        tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+        .footer {
+            margin-top: 30px;
+            text-align: center;
+            color: #999;
+            font-size: 0.85em;
+        }
+        @media print {
+            body { margin: 0; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <h1>📝 Meine Wortliste</h1>
+    <div class="meta">
+        Erstellt am: ${date} • ${vocabularyList.length} Wörter
+    </div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 25%;">Wort</th>
+                <th style="width: 25%;">Übersetzung</th>
+                <th style="width: 50%;">Erklärung</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${tableRows}
+        </tbody>
+    </table>
+    
+    <div class="footer">
+        LeseAssistent - Vokabeltrainer
+    </div>
+</body>
+</html>
+            `;
+        }
+
+        // Keep old translation function for compatibility
+        async function translateWord(word) {
+            // Now redirects to showWordInfo
+            showWordInfo(word);
+        }
+
+        function closeTranslation() {
+            document.getElementById('translationPopup').classList.remove('visible');
+        }
+
+        // =============================================================================
+        // TEXT SIMPLIFICATION
+        // =============================================================================
+
+        async function requestSimplifiedText(level, buttonElement) {
+            if (!currentText) {
+                showToast('Kein Text vorhanden', 'error');
+                return;
+            }
+            
+            // Prüfen ob schon im Cache
+            if (simplifiedTexts[level]) {
+                displaySimplifiedText(level, simplifiedTexts[level]);
+                return;
+            }
+            
+            // Button als ladend markieren
+            const buttons = document.querySelectorAll('.level-btn');
+            buttons.forEach(btn => btn.classList.remove('active', 'loading'));
+            buttonElement.classList.add('loading');
+            buttonElement.disabled = true;
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/simplify-text`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: originalText || currentText,
+                        level: level,
+                        session_code: sessionCode
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                // In Cache speichern
+                simplifiedTexts[level] = data.simplified_text;
+                
+                // Anzeigen
+                displaySimplifiedText(level, data.simplified_text);
+                
+                // Lehrer informieren
+                socket.emit('student_using_simplified', {
+                    code: sessionCode,
+                    level: level
+                });
+                
+            } catch (error) {
+                console.error('Simplification error:', error);
+                showToast('Fehler bei der Textvereinfachung: ' + error.message, 'error');
+            } finally {
+                buttonElement.classList.remove('loading');
+                buttonElement.disabled = false;
+            }
+        }
+
+        function displaySimplifiedText(level, text) {
+            // Original sichern falls noch nicht geschehen
+            if (!originalText) {
+                originalText = currentText;
+            }
+            
+            currentSimplificationLevel = level;
+            
+            // Button-Status aktualisieren
+            document.querySelectorAll('.level-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.level === level) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            // Vereinfachten Text anzeigen
+            document.getElementById('simplifiedBadge').textContent = level;
+            document.getElementById('simplifiedTextBox').textContent = text;
+            document.getElementById('simplifiedTextContainer').classList.add('visible');
+            
+            // Original-Text im Hauptbereich durch vereinfachten ersetzen
+            displayText(text);
+            
+            showToast(`📖 Text auf Niveau ${level} vereinfacht`, 'success');
+        }
+
+        function showOriginalText(buttonElement) {
+            if (!originalText) return;
+            
+            currentSimplificationLevel = 'original';
+            
+            // Button-Status aktualisieren
+            document.querySelectorAll('.level-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.level === 'original') {
+                    btn.classList.add('active');
+                }
+            });
+            
+            // Vereinfachten Text-Container ausblenden
+            document.getElementById('simplifiedTextContainer').classList.remove('visible');
+            
+            // Original wiederherstellen
+            displayText(originalText);
+            
+            // Lehrer informieren
+            socket.emit('student_using_simplified', {
+                code: sessionCode,
+                level: 'original'
+            });
+            
+            showToast('📖 Originaltext wiederhergestellt', 'info');
+        }
+
+        function resetSimplificationState() {
+            currentSimplificationLevel = 'original';
+            simplifiedTexts = {};
+            originalText = '';
+            
+            // UI zurücksetzen
+            document.querySelectorAll('.level-btn').forEach(btn => {
+                btn.classList.remove('active', 'loading');
+                if (btn.dataset.level === 'original') {
+                    btn.classList.add('active');
+                }
+            });
+            document.getElementById('simplifiedTextContainer').classList.remove('visible');
+        }
+
+        // =============================================================================
+        // NAVIGATION
+        // =============================================================================
+
+        function openSpeakingPractice() {
+            if (!currentText) {
+                showToast('Kein Text vorhanden', 'error');
+                return;
+            }
+            window.location.href = '/nachsprechen';
+        }
+
+        function openTasks() {
+            if (!currentText) {
+                showToast('Kein Text vorhanden', 'error');
+                return;
+            }
+            window.location.href = '/aufgaben';
+        }
+
+        function goBack() {
+            if (isPlaying) {
+                stopAudio();
+            }
+            window.location.href = '/';
+        }
+
+        // =============================================================================
+        // UTILITIES
+        // =============================================================================
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+    </script>
+</body>
+</html>

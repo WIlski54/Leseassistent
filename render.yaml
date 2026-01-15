@@ -1,0 +1,16 @@
+# Render.com Blueprint
+# Einfach das Repo verbinden und Render erkennt diese Konfiguration automatisch
+
+services:
+  - type: web
+    name: leseassistent
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --worker-class geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+      - key: ASYNC_MODE
+        value: "gevent"
+    plan: free
+    autoDeploy: true

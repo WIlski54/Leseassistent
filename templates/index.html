@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LeseAssistent | Gesamtschule Meiderich</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #0F172A;
+            --accent: #3B82F6;
+            --accent-glow: rgba(59, 130, 246, 0.4);
+            --success: #10B981;
+            --surface: rgba(255, 255, 255, 0.85);
+            --surface-elevated: rgba(255, 255, 255, 0.95);
+            --text-primary: #0F172A;
+            --text-secondary: #64748B;
+            --border: rgba(148, 163, 184, 0.2);
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+            background: #0F172A;
+        }
+
+        /* ===== ANIMATED BACKGROUND ===== */
+        .bg-canvas {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            background: 
+                radial-gradient(ellipse 80% 50% at 50% -20%, rgba(59, 130, 246, 0.3) 0%, transparent 50%),
+                radial-gradient(ellipse 60% 40% at 80% 60%, rgba(16, 185, 129, 0.15) 0%, transparent 50%),
+                radial-gradient(ellipse 50% 30% at 20% 80%, rgba(139, 92, 246, 0.15) 0%, transparent 50%),
+                linear-gradient(180deg, #0F172A 0%, #1E293B 100%);
+        }
+
+        .bg-grid {
+            position: fixed;
+            inset: 0;
+            z-index: 1;
+            background-image: 
+                linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            mask-image: radial-gradient(ellipse at center, black 0%, transparent 70%);
+        }
+
+        .floating-orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(80px);
+            animation: float 20s ease-in-out infinite;
+            z-index: 1;
+        }
+
+        .orb-1 {
+            width: 400px;
+            height: 400px;
+            background: rgba(59, 130, 246, 0.2);
+            top: -100px;
+            right: -100px;
+            animation-delay: 0s;
+        }
+
+        .orb-2 {
+            width: 300px;
+            height: 300px;
+            background: rgba(16, 185, 129, 0.15);
+            bottom: -50px;
+            left: -50px;
+            animation-delay: -7s;
+        }
+
+        .orb-3 {
+            width: 200px;
+            height: 200px;
+            background: rgba(139, 92, 246, 0.15);
+            top: 50%;
+            left: 50%;
+            animation-delay: -14s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            25% { transform: translate(30px, -30px) scale(1.05); }
+            50% { transform: translate(-20px, 20px) scale(0.95); }
+            75% { transform: translate(20px, 10px) scale(1.02); }
+        }
+
+        /* ===== MAIN CONTAINER ===== */
+        .page-container {
+            position: relative;
+            z-index: 10;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ===== TOP BAR ===== */
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.5rem 3rem;
+        }
+
+        .school-brand {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .school-logo {
+            width: 55px;
+            height: 55px;
+            border-radius: 0;
+            object-fit: contain;
+            background: transparent;
+        }
+
+        .school-name {
+            color: white;
+            font-size: 0.9rem;
+            font-weight: 500;
+            opacity: 0.9;
+        }
+
+        .school-name span {
+            display: block;
+            font-size: 0.75rem;
+            opacity: 0.6;
+            font-weight: 400;
+        }
+
+        .creator-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 0.5rem 1rem;
+            border-radius: 100px;
+        }
+
+        .wk-logo {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            object-fit: contain;
+        }
+
+        .creator-text {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.8rem;
+        }
+
+        /* ===== HERO SECTION ===== */
+        .hero {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            text-align: center;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(59, 130, 246, 0.15);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            padding: 0.5rem 1rem;
+            border-radius: 100px;
+            color: #60A5FA;
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-bottom: 2rem;
+            animation: pulse-glow 3s ease-in-out infinite;
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.2); }
+            50% { box-shadow: 0 0 40px rgba(59, 130, 246, 0.4); }
+        }
+
+        .hero-title {
+            font-family: 'Instrument Serif', Georgia, serif;
+            font-size: clamp(3rem, 8vw, 5.5rem);
+            font-weight: 400;
+            color: white;
+            line-height: 1.1;
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.02em;
+        }
+
+        .hero-title .accent {
+            background: linear-gradient(135deg, #3B82F6 0%, #10B981 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-style: italic;
+        }
+
+        .hero-subtitle {
+            font-size: 1.25rem;
+            color: rgba(255, 255, 255, 0.6);
+            max-width: 600px;
+            line-height: 1.7;
+            margin-bottom: 3rem;
+        }
+
+        /* ===== CHOICE CARDS ===== */
+        .choice-section {
+            display: flex;
+            gap: 1.5rem;
+            margin-bottom: 4rem;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .choice-card {
+            position: relative;
+            background: var(--surface);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 2.5rem 2rem;
+            width: 280px;
+            text-decoration: none;
+            color: inherit;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+        }
+
+        .choice-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, transparent 0%, rgba(255,255,255,0.5) 100%);
+            opacity: 0;
+            transition: opacity 0.4s;
+        }
+
+        .choice-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 
+                0 20px 40px rgba(0, 0, 0, 0.2),
+                0 0 60px var(--accent-glow);
+            border-color: rgba(59, 130, 246, 0.4);
+        }
+
+        .choice-card:hover::before {
+            opacity: 1;
+        }
+
+        .choice-icon {
+            width: 70px;
+            height: 70px;
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            margin-bottom: 1.5rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .teacher-card .choice-icon {
+            background: linear-gradient(135deg, #3B82F6 0%, #6366F1 100%);
+            box-shadow: 0 8px 30px rgba(59, 130, 246, 0.3);
+        }
+
+        .student-card .choice-icon {
+            background: linear-gradient(135deg, #10B981 0%, #34D399 100%);
+            box-shadow: 0 8px 30px rgba(16, 185, 129, 0.3);
+        }
+
+        .choice-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        .choice-desc {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+            position: relative;
+            z-index: 1;
+        }
+
+        .choice-arrow {
+            position: absolute;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            width: 36px;
+            height: 36px;
+            background: var(--primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1rem;
+            opacity: 0;
+            transform: translateX(-10px);
+            transition: all 0.3s;
+        }
+
+        .choice-card:hover .choice-arrow {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        /* ===== INFO SECTION FOR COLLEAGUES ===== */
+        .info-section {
+            background: var(--surface-elevated);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 2.5rem;
+            max-width: 800px;
+            margin: 0 auto 3rem;
+        }
+
+        .info-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .info-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #F59E0B 0%, #F97316 100%);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .info-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .info-content {
+            color: var(--text-secondary);
+            line-height: 1.8;
+            font-size: 1rem;
+        }
+
+        .info-content p {
+            margin-bottom: 1rem;
+        }
+
+        .info-content strong {
+            color: var(--text-primary);
+        }
+
+        .feature-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: rgba(59, 130, 246, 0.05);
+            border-radius: 12px;
+            font-size: 0.9rem;
+            color: var(--text-primary);
+        }
+
+        .feature-item span:first-child {
+            font-size: 1.25rem;
+        }
+
+        /* ===== SECURITY FOOTER ===== */
+        .security-footer {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            padding: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .security-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 0.85rem;
+        }
+
+        .security-item span:first-child {
+            font-size: 1rem;
+        }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 768px) {
+            .top-bar {
+                padding: 1rem 1.5rem;
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .hero {
+                padding: 1.5rem;
+            }
+
+            .choice-section {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .choice-card {
+                width: 100%;
+                max-width: 320px;
+            }
+
+            .info-section {
+                margin: 0 1rem 2rem;
+            }
+
+            .security-footer {
+                flex-direction: column;
+                align-items: center;
+                gap: 1rem;
+            }
+        }
+
+        /* ===== ANIMATIONS ===== */
+        .fade-in-up {
+            animation: fadeInUp 0.8s ease forwards;
+            opacity: 0;
+        }
+
+        .delay-1 { animation-delay: 0.1s; }
+        .delay-2 { animation-delay: 0.2s; }
+        .delay-3 { animation-delay: 0.3s; }
+        .delay-4 { animation-delay: 0.4s; }
+        .delay-5 { animation-delay: 0.5s; }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Animated Background -->
+    <div class="bg-canvas"></div>
+    <div class="bg-grid"></div>
+    <div class="floating-orb orb-1"></div>
+    <div class="floating-orb orb-2"></div>
+    <div class="floating-orb orb-3"></div>
+
+    <div class="page-container">
+        <!-- Top Bar -->
+        <header class="top-bar fade-in-up">
+            <div class="school-brand">
+                <img src="/static/logogsm.png" alt="Gesamtschule Meiderich" class="school-logo">
+                <div class="school-name">
+                    Gesamtschule Meiderich
+                    <span>Duisburg</span>
+                </div>
+            </div>
+            <div class="creator-badge">
+                <img src="/static/logowk.png" alt="WK" class="wk-logo">
+                <span class="creator-text">Digital Learning Lab</span>
+            </div>
+        </header>
+
+        <!-- Hero Section -->
+        <main class="hero">
+            <div class="hero-badge fade-in-up delay-1">
+                <span>✨</span>
+                <span>KI-gestütztes Leseverständnis</span>
+            </div>
+
+            <h1 class="hero-title fade-in-up delay-2">
+                Lese<span class="accent">Assistent</span>
+            </h1>
+
+            <p class="hero-subtitle fade-in-up delay-3">
+                Texte verstehen, vorlesen lassen und in Echtzeit mit 
+                KI-Unterstützung lernen – barrierefrei und mehrsprachig.
+            </p>
+
+            <!-- Choice Cards -->
+            <div class="choice-section">
+                <a href="/teacher" class="choice-card teacher-card fade-in-up delay-4">
+                    <div class="choice-icon">👨‍🏫</div>
+                    <div class="choice-title">Lehrkraft</div>
+                    <div class="choice-desc">Session starten, Text teilen und Schüler live begleiten</div>
+                    <div class="choice-arrow">→</div>
+                </a>
+
+                <a href="/student" class="choice-card student-card fade-in-up delay-5">
+                    <div class="choice-icon">👩‍🎓</div>
+                    <div class="choice-title">Schüler/in</div>
+                    <div class="choice-desc">Mit Code beitreten und interaktiv lesen lernen</div>
+                    <div class="choice-arrow">→</div>
+                </a>
+            </div>
+
+            <!-- Info Section for Colleagues -->
+            <section class="info-section fade-in-up delay-5">
+                <div class="info-header">
+                    <div class="info-icon">💡</div>
+                    <h2 class="info-title">Für Kolleg:innen</h2>
+                </div>
+                <div class="info-content">
+                    <p>
+                        Der <strong>LeseAssistent</strong> ist ein digitales Werkzeug zur Förderung des Leseverständnisses – 
+                        besonders geeignet für <strong>DaZ-Klassen</strong>, <strong>Förderkurse</strong> und 
+                        <strong>heterogene Lerngruppen</strong>.
+                    </p>
+                    <p>
+                        Du gibst einen Text ein (oder lädst PDF/Word hoch), die Schüler:innen treten per Code bei. 
+                        Sie können sich den Text <strong>vorlesen lassen</strong>, einzelne Wörter <strong>nachschlagen</strong> 
+                        (inkl. KI-generierter Bilder), Texte auf verschiedene <strong>Sprachniveaus (A1/A2/B1)</strong> 
+                        vereinfachen lassen und <strong>Übersetzungen</strong> in ihre Muttersprache anfordern – alles in Echtzeit und unter deiner Kontrolle.
+                    </p>
+                    <div class="feature-list">
+                        <div class="feature-item">
+                            <span>🔊</span>
+                            <span>Synchronisiertes Vorlesen</span>
+                        </div>
+                        <div class="feature-item">
+                            <span>🎤</span>
+                            <span>Nachsprech-Übungen</span>
+                        </div>
+                        <div class="feature-item">
+                            <span>📚</span>
+                            <span>Wortschatz mit Bildern</span>
+                        </div>
+                        <div class="feature-item">
+                            <span>🌍</span>
+                            <span>Mehrsprachige Übersetzung</span>
+                        </div>
+                        <div class="feature-item">
+                            <span>📊</span>
+                            <span>A1/A2/B1 Textversionen</span>
+                        </div>
+                        <div class="feature-item">
+                            <span>📝</span>
+                            <span>Auto-generierte Aufgaben</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Security Footer -->
+        <footer class="security-footer">
+            <div class="security-item">
+                <span>🔒</span>
+                <span>API-Keys bleiben beim Lehrer</span>
+            </div>
+            <div class="security-item">
+                <span>👁️</span>
+                <span>Barrierefreie Darstellung</span>
+            </div>
+            <div class="security-item">
+                <span>🛡️</span>
+                <span>DSGVO-konform</span>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>
