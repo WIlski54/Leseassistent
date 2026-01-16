@@ -1,4 +1,4 @@
-# 📖 LeseAssistent für die GSM
+# 📖 LeseAssistent für die GSM 2026
 
 **Texte verstehen mit synchronisiertem Vorlesen**
 
