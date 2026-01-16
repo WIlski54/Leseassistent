@@ -1,4 +1,4 @@
-# 📖 LeseAssistent
+# 📖 LeseAssistent für die GSM
 
 **Texte verstehen mit synchronisiertem Vorlesen**
 
