@@ -11,22 +11,39 @@ Sicheres Session-basiertes System für den Unterricht.
 
 from flask import Flask, request, jsonify, render_template, send_file
 from flask_cors import CORS
-from flask_socketio import SocketIO, emit, join_room, leave_room, rooms
+from flask_socketio import SocketIO, emit, join_room
 import requests
 import os
 import json
 import base64
-import hashlib
 import re
-import random
-import secrets
-import string
 import qrcode
 from io import BytesIO
-from collections import OrderedDict
-from datetime import datetime, timedelta
+from datetime import datetime
 import threading
 import time
+
+from cache_store import (
+    add_to_cache,
+    add_to_translation_cache,
+    get_cache_key,
+    get_cache_stats,
+    get_from_cache,
+    get_from_translation_cache,
+    get_translation_cache_key,
+)
+from session_store import (
+    CLEANUP_INTERVAL_SECONDS,
+    add_student_to_session,
+    cleanup_expired_sessions,
+    create_session,
+    end_session,
+    get_session,
+    get_session_keys,
+    has_teacher_access,
+    sessions,
+    sessions_lock,
+)
 
 # Für Datei-Verarbeitung
 try:
@@ -63,119 +80,14 @@ socketio = SocketIO(app, cors_allowed_origins=CORS_ORIGINS, async_mode=ASYNC_MOD
 # SESSION MANAGEMENT
 # =============================================================================
 
-# Session-Speicher (In-Memory - Keys sind NIE in einer Datenbank!)
-sessions = {}
-sessions_lock = threading.Lock()
-
-# Session-Konfiguration
-SESSION_CODE_LENGTH = 6
-SESSION_TIMEOUT_HOURS = 3
-CLEANUP_INTERVAL_SECONDS = 300  # Alle 5 Minuten aufräumen
 MAX_AI_TEXT_CHARS = int(os.environ.get('MAX_AI_TEXT_CHARS', '20000'))
 MAX_TTS_CHARS = int(os.environ.get('MAX_TTS_CHARS', '10000'))
-
-# Anonyme Tiernamen für Schüler
-ANONYMOUS_ANIMALS = [
-    ('🦊', 'Fuchs'), ('🐻', 'Bär'), ('🦁', 'Löwe'), ('🐯', 'Tiger'),
-    ('🦋', 'Schmetterling'), ('🐢', 'Schildkröte'), ('🦉', 'Eule'), ('🐬', 'Delfin'),
-    ('🦅', 'Adler'), ('🐺', 'Wolf'), ('🦌', 'Hirsch'), ('🐘', 'Elefant'),
-    ('🦒', 'Giraffe'), ('🐼', 'Panda'), ('🦜', 'Papagei'), ('🐨', 'Koala'),
-    ('🦩', 'Flamingo'), ('🐸', 'Frosch'), ('🦔', 'Igel'), ('🐿️', 'Eichhörnchen'),
-    ('🦭', 'Robbe'), ('🐧', 'Pinguin'), ('🦚', 'Pfau'), ('🐝', 'Biene'),
-    ('🦎', 'Eidechse'), ('🐙', 'Oktopus'), ('🦀', 'Krabbe'), ('🐌', 'Schnecke')
-]
-
-def get_anonymous_name(session_code, student_sid):
-    """Generiert einen anonymen Tiernamen für einen Schüler."""
-    with sessions_lock:
-        if session_code in sessions:
-            # Bereits verwendete Namen in dieser Session
-            used_indices = set()
-            for sid, student_data in sessions[session_code]['students'].items():
-                if 'animal_index' in student_data:
-                    used_indices.add(student_data['animal_index'])
-            
-            # Nächsten verfügbaren Namen finden
-            for i in range(len(ANONYMOUS_ANIMALS)):
-                if i not in used_indices:
-                    return i, ANONYMOUS_ANIMALS[i]
-            
-            # Fallback: zufällig mit Nummer
-            idx = random.randint(0, len(ANONYMOUS_ANIMALS) - 1)
-            emoji, name = ANONYMOUS_ANIMALS[idx]
-            return idx, (emoji, f"{name} {len(sessions[session_code]['students']) + 1}")
-    
-    return 0, ANONYMOUS_ANIMALS[0]
-
-def generate_session_code():
-    """Generiert einen 6-stelligen alphanumerischen Code (ohne verwechselbare Zeichen)."""
-    # Keine 0, O, I, l um Verwechslungen zu vermeiden
-    chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
-    while True:
-        code = ''.join(random.choices(chars, k=SESSION_CODE_LENGTH))
-        with sessions_lock:
-            if code not in sessions:
-                return code
-
-def create_session(teacher_sid, keys, pin=''):
-    """Erstellt eine neue Session für einen Lehrer."""
-    code = generate_session_code()
-    with sessions_lock:
-        sessions[code] = {
-            'keys': keys,
-            'teacher_sid': teacher_sid,
-            'teacher_token': secrets.token_urlsafe(32),
-            'created': datetime.now(),
-            'expires': datetime.now() + timedelta(hours=SESSION_TIMEOUT_HOURS),
-            'students': {},  # {sid: {'joined': datetime, 'name': optional, 'anonymous_id': ...}}
-            'text': '',  # Geteilter Text für alle Schüler
-            'pin': pin,  # Optionaler PIN-Schutz für Lehrer-Dashboard
-            'tasks': [],  # Generierte Aufgaben
-            'tasks_available': False,  # Ob Aufgaben freigegeben sind
-            'translation_requests': {},  # {student_sid: {'language': 'tr', 'status': 'pending'/'approved'/'denied'}}
-            'simplification_enabled': False,  # Ob Textvereinfachung erlaubt ist
-            'student_levels': {},  # {student_sid: {'level': 'A1/A2/B1/original', 'anonymous_id': ...}}
-        }
-    return code
-
-def get_session(code):
-    """Holt Session-Daten (ohne Keys zu exponieren)."""
-    with sessions_lock:
-        if code in sessions:
-            session = sessions[code]
-            if datetime.now() < session['expires']:
-                return session
-            else:
-                # Session abgelaufen, löschen
-                del sessions[code]
-    return None
-
-def get_session_keys(code):
-    """Holt die API-Keys für eine Session (nur für Server-interne Nutzung!)."""
-    session = get_session(code)
-    if session:
-        return session['keys']
-    return None
 
 def get_request_teacher_token(data=None):
     """Liest das Lehrer-Token aus Header oder JSON-Body."""
     if data is None:
         data = request.get_json(silent=True) or {}
     return (request.headers.get('X-Teacher-Token') or data.get('teacher_token') or '').strip()
-
-def has_teacher_access(code, teacher_token=None, sid=None):
-    """Prüft, ob eine Anfrage die aktive Lehrkraft-Session steuern darf."""
-    session = get_session(code)
-    if not session:
-        return False
-
-    if sid and session.get('teacher_sid') == sid:
-        return True
-
-    return bool(teacher_token) and secrets.compare_digest(
-        teacher_token,
-        session.get('teacher_token', '')
-    )
 
 def require_teacher_access(code, data=None):
     """Gemeinsame Prüfung für HTTP-Endpunkte, die nur die Lehrkraft nutzen darf."""
@@ -187,114 +99,15 @@ def require_teacher_access(code, data=None):
 
     return None
 
-def end_session(code):
-    """Beendet eine Session und löscht alle Keys."""
-    with sessions_lock:
-        if code in sessions:
-            del sessions[code]
-            return True
-    return False
-
-def add_student_to_session(code, student_sid, student_name=None):
-    """Fügt einen Schüler zur Session hinzu mit anonymem Tiernamen."""
-    animal_index, (emoji, animal_name) = get_anonymous_name(code, student_sid)
-    
-    with sessions_lock:
-        if code in sessions:
-            sessions[code]['students'][student_sid] = {
-                'joined': datetime.now(),
-                'name': student_name,
-                'animal_index': animal_index,
-                'animal_emoji': emoji,
-                'animal_name': animal_name,
-                'anonymous_id': f"{emoji} {animal_name}"
-            }
-            return sessions[code]['students'][student_sid]
-    return None
-
-def remove_student_from_session(code, student_sid):
-    """Entfernt einen Schüler aus der Session."""
-    with sessions_lock:
-        if code in sessions and student_sid in sessions[code]['students']:
-            del sessions[code]['students'][student_sid]
-            return True
-    return False
-
-def get_student_count(code):
-    """Gibt die Anzahl der verbundenen Schüler zurück."""
-    session = get_session(code)
-    if session:
-        return len(session['students'])
-    return 0
-
-def cleanup_expired_sessions():
-    """Entfernt abgelaufene Sessions (wird periodisch aufgerufen)."""
-    with sessions_lock:
-        expired = [code for code, session in sessions.items() 
-                   if datetime.now() >= session['expires']]
-        for code in expired:
-            del sessions[code]
-            app.logger.info(f"Session {code} expired and cleaned up")
-
 # Background-Thread für Session-Cleanup
 def session_cleanup_thread():
     while True:
         time.sleep(CLEANUP_INTERVAL_SECONDS)
-        cleanup_expired_sessions()
+        for code in cleanup_expired_sessions():
+            app.logger.info(f"Session {code} expired and cleaned up")
 
 # Cleanup-Thread starten (nur wenn nicht im Import-Modus)
 cleanup_thread = threading.Thread(target=session_cleanup_thread, daemon=True)
-
-# =============================================================================
-# TTS & TRANSLATION CACHE (In-Memory)
-# =============================================================================
-
-MAX_CACHE_SIZE = 500
-MAX_TRANSLATION_CACHE_SIZE = 1000
-tts_cache = OrderedDict()
-translation_cache = OrderedDict()
-cache_lock = threading.Lock()
-translation_cache_lock = threading.Lock()
-
-def get_cache_key(text, voice_id):
-    content = f"{text}|{voice_id}"
-    return hashlib.md5(content.encode('utf-8')).hexdigest()
-
-def get_translation_cache_key(text, target_language):
-    content = f"{text}|{target_language}"
-    return hashlib.md5(content.encode('utf-8')).hexdigest()
-
-def get_from_cache(cache_key):
-    with cache_lock:
-        if cache_key in tts_cache:
-            tts_cache.move_to_end(cache_key)
-            return tts_cache[cache_key]
-    return None
-
-def add_to_cache(cache_key, data):
-    with cache_lock:
-        if cache_key in tts_cache:
-            tts_cache.move_to_end(cache_key)
-        else:
-            if len(tts_cache) >= MAX_CACHE_SIZE:
-                tts_cache.popitem(last=False)
-            tts_cache[cache_key] = data
-
-def get_from_translation_cache(cache_key):
-    with translation_cache_lock:
-        if cache_key in translation_cache:
-            translation_cache.move_to_end(cache_key)
-            return translation_cache[cache_key]
-    return None
-
-def add_to_translation_cache(cache_key, translated_text):
-    with translation_cache_lock:
-        if cache_key in translation_cache:
-            translation_cache.move_to_end(cache_key)
-        else:
-            if len(translation_cache) >= MAX_TRANSLATION_CACHE_SIZE:
-                translation_cache.popitem(last=False)
-            translation_cache[cache_key] = translated_text
 
 # =============================================================================
 # TEXT CLEANUP
@@ -2081,18 +1894,12 @@ def transcribe_with_gemini(api_key, audio_data, language):
 @app.route('/api/cache-stats')
 def cache_stats():
     """Cache-Statistiken (für Monitoring)."""
-    with cache_lock:
-        tts_size = len(tts_cache)
-    with translation_cache_lock:
-        translation_size = len(translation_cache)
     with sessions_lock:
         session_count = len(sessions)
-    
-    return jsonify({
-        'tts_cache': {'size': tts_size, 'max': MAX_CACHE_SIZE},
-        'translation_cache': {'size': translation_size, 'max': MAX_TRANSLATION_CACHE_SIZE},
-        'active_sessions': session_count
-    })
+
+    stats = get_cache_stats()
+    stats['active_sessions'] = session_count
+    return jsonify(stats)
 
 # =============================================================================
 # RUN
