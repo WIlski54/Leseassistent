@@ -19,6 +19,7 @@ import base64
 import hashlib
 import re
 import random
+import secrets
 import string
 import qrcode
 from io import BytesIO
@@ -42,11 +43,21 @@ except ImportError:
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'leseassistent-secret-key-change-in-production')
-CORS(app)
+app.config['MAX_CONTENT_LENGTH'] = int(os.environ.get('MAX_UPLOAD_MB', '20')) * 1024 * 1024
+
+CORS_ORIGINS_ENV = os.environ.get('CORS_ORIGINS', '*').strip()
+CORS_ORIGINS = '*' if CORS_ORIGINS_ENV == '*' else [
+    origin.strip() for origin in CORS_ORIGINS_ENV.split(',') if origin.strip()
+]
+CORS(app, resources={r"/api/*": {"origins": CORS_ORIGINS}})
+
+@app.errorhandler(413)
+def file_too_large(error):
+    return jsonify({'error': 'Datei ist zu gross'}), 413
 
 # Für lokale Entwicklung 'threading', für Production (Render) 'gevent'
 ASYNC_MODE = os.environ.get('ASYNC_MODE', 'threading')
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode=ASYNC_MODE)
+socketio = SocketIO(app, cors_allowed_origins=CORS_ORIGINS, async_mode=ASYNC_MODE)
 
 # =============================================================================
 # SESSION MANAGEMENT
@@ -60,6 +71,8 @@ sessions_lock = threading.Lock()
 SESSION_CODE_LENGTH = 6
 SESSION_TIMEOUT_HOURS = 3
 CLEANUP_INTERVAL_SECONDS = 300  # Alle 5 Minuten aufräumen
+MAX_AI_TEXT_CHARS = int(os.environ.get('MAX_AI_TEXT_CHARS', '20000'))
+MAX_TTS_CHARS = int(os.environ.get('MAX_TTS_CHARS', '10000'))
 
 # Anonyme Tiernamen für Schüler
 ANONYMOUS_ANIMALS = [
@@ -111,6 +124,7 @@ def create_session(teacher_sid, keys, pin=''):
         sessions[code] = {
             'keys': keys,
             'teacher_sid': teacher_sid,
+            'teacher_token': secrets.token_urlsafe(32),
             'created': datetime.now(),
             'expires': datetime.now() + timedelta(hours=SESSION_TIMEOUT_HOURS),
             'students': {},  # {sid: {'joined': datetime, 'name': optional, 'anonymous_id': ...}}
@@ -141,6 +155,36 @@ def get_session_keys(code):
     session = get_session(code)
     if session:
         return session['keys']
+    return None
+
+def get_request_teacher_token(data=None):
+    """Liest das Lehrer-Token aus Header oder JSON-Body."""
+    if data is None:
+        data = request.get_json(silent=True) or {}
+    return (request.headers.get('X-Teacher-Token') or data.get('teacher_token') or '').strip()
+
+def has_teacher_access(code, teacher_token=None, sid=None):
+    """Prüft, ob eine Anfrage die aktive Lehrkraft-Session steuern darf."""
+    session = get_session(code)
+    if not session:
+        return False
+
+    if sid and session.get('teacher_sid') == sid:
+        return True
+
+    return bool(teacher_token) and secrets.compare_digest(
+        teacher_token,
+        session.get('teacher_token', '')
+    )
+
+def require_teacher_access(code, data=None):
+    """Gemeinsame Prüfung für HTTP-Endpunkte, die nur die Lehrkraft nutzen darf."""
+    if not get_session(code):
+        return jsonify({'error': 'Session nicht gefunden'}), 404
+
+    if not has_teacher_access(code, teacher_token=get_request_teacher_token(data)):
+        return jsonify({'error': 'Keine Berechtigung für diese Session'}), 403
+
     return None
 
 def end_session(code):
@@ -332,6 +376,7 @@ def api_create_session():
         return jsonify({
             'success': True,
             'code': code,
+            'teacher_token': sessions[code]['teacher_token'],
             'expires': sessions[code]['expires'].isoformat()
         })
         
@@ -376,8 +421,12 @@ def api_end_session():
     }
     """
     try:
-        data = request.json
+        data = request.get_json(silent=True) or {}
         code = data.get('code', '').upper().strip()
+
+        auth_error = require_teacher_access(code, data)
+        if auth_error:
+            return auth_error
         
         if end_session(code):
             # Alle Clients in dieser Session benachrichtigen
@@ -464,9 +513,16 @@ def api_set_session_text():
     }
     """
     try:
-        data = request.json
+        data = request.get_json(silent=True) or {}
         code = data.get('code', '').upper().strip()
         text = data.get('text', '')
+
+        auth_error = require_teacher_access(code, data)
+        if auth_error:
+            return auth_error
+
+        if len(text) > MAX_AI_TEXT_CHARS:
+            return jsonify({'error': f'Text ist zu lang (max. {MAX_AI_TEXT_CHARS} Zeichen)'}), 400
         
         with sessions_lock:
             if code in sessions:
@@ -536,6 +592,7 @@ def handle_teacher_create_session(data):
     
     emit('session_created', {
         'code': code,
+        'teacher_token': sessions[code]['teacher_token'],
         'expires': sessions[code]['expires'].isoformat(),
         'has_pin': bool(pin)
     })
@@ -1370,23 +1427,40 @@ def api_generate_tasks():
     }
     """
     try:
-        data = request.json
-        text = data.get('text', '')
+        data = request.get_json(silent=True) or {}
+        text = data.get('text', '').strip()
         session_code = data.get('session_code', '').upper().strip()
+        difficulty = data.get('difficulty', 'mittel')
         
         if not text:
             return jsonify({'error': 'Text fehlt'}), 400
+
+        if len(text) > MAX_AI_TEXT_CHARS:
+            return jsonify({'error': f'Text ist zu lang (max. {MAX_AI_TEXT_CHARS} Zeichen)'}), 400
         
-        # Keys aus Session holen
-        keys = get_session_keys(session_code)
-        if not keys:
-            return jsonify({'error': 'Session nicht gefunden'}), 404
-        
-        ai_key = keys.get('ai', '')
-        ai_provider = keys.get('ai_provider', 'openai')
+        if session_code:
+            auth_error = require_teacher_access(session_code, data)
+            if auth_error:
+                return auth_error
+
+            keys = get_session_keys(session_code)
+            ai_key = keys.get('ai', '') if keys else ''
+            ai_provider = keys.get('ai_provider', 'openai') if keys else 'openai'
+        else:
+            ai_key = data.get('api_key', '')
+            ai_provider = data.get('provider', data.get('ai_provider', 'openai'))
         
         if not ai_key:
             return jsonify({'error': 'KI API Key nicht konfiguriert'}), 400
+
+        difficulty_notes = {
+            'einfach': 'Klasse 5-6: kurze, sehr klare Fragen und einfache Antwortoptionen.',
+            'mittel': 'Klasse 7-8: klare Fragen mit moderater Textnaehe.',
+            'schwer': 'Klasse 9-10: auch Schlussfolgerungen und Begruendungen einbauen.',
+            'oberstufe': 'Oberstufe: anspruchsvollere Analyse- und Deutungsfragen einbauen.'
+        }
+        difficulty_note = difficulty_notes.get(difficulty, difficulty_notes['mittel'])
+        text = f"SCHWIERIGKEIT:\n{difficulty_note}\n\n{text}"
         
         # Prompt für Aufgabengenerierung
         prompt = f"""Erstelle 5 Verständnisaufgaben zu folgendem Text. Die Aufgaben sollen für Schüler mit Leseschwierigkeiten geeignet sein.
@@ -1427,7 +1501,8 @@ Antworte NUR mit dem JSON-Array, keine anderen Texte."""
                     'model': 'gpt-4o-mini',
                     'messages': [{'role': 'user', 'content': prompt}],
                     'temperature': 0.7
-                }
+                },
+                timeout=60
             )
             
             if response.status_code == 200:
@@ -1448,7 +1523,8 @@ Antworte NUR mit dem JSON-Array, keine anderen Texte."""
                 json={
                     'contents': [{'parts': [{'text': prompt}]}],
                     'generationConfig': {'temperature': 0.7}
-                }
+                },
+                timeout=60
             )
             
             if response.status_code == 200:
@@ -1473,7 +1549,8 @@ Antworte NUR mit dem JSON-Array, keine anderen Texte."""
                     'model': 'claude-sonnet-4-20250514',
                     'max_tokens': 2000,
                     'messages': [{'role': 'user', 'content': prompt}]
-                }
+                },
+                timeout=60
             )
             
             if response.status_code == 200:
@@ -1512,11 +1589,14 @@ def proxy_tts():
     }
     """
     try:
-        data = request.json
-        text = data.get('text')
+        data = request.get_json(silent=True) or {}
+        text = data.get('text', '').strip()
         
         if not text:
             return jsonify({'error': 'Text fehlt'}), 400
+
+        if len(text) > MAX_TTS_CHARS:
+            return jsonify({'error': f'Text ist zu lang für TTS (max. {MAX_TTS_CHARS} Zeichen)'}), 400
         
         # Keys ermitteln (Session oder direkt)
         session_code = data.get('session_code', '').upper().strip()
@@ -1616,6 +1696,10 @@ def ocr_image():
         session_code = data.get('session_code', '').upper().strip()
         
         if session_code:
+            auth_error = require_teacher_access(session_code, data)
+            if auth_error:
+                return auth_error
+
             keys = get_session_keys(session_code)
             if not keys:
                 return jsonify({'error': 'Session nicht gefunden'}), 404
@@ -1657,12 +1741,15 @@ Behalte Absätze bei. Wenn kein Text erkennbar ist: [KEIN TEXT ERKANNT]"""
 def proxy_translate():
     """Übersetzung via KI-API - Session-basiert oder mit direktem Key."""
     try:
-        data = request.json
-        text = data.get('text')
+        data = request.get_json(silent=True) or {}
+        text = data.get('text', '').strip()
         target_language = data.get('target_language', 'de')
         
         if not text:
             return jsonify({'error': 'Text fehlt'}), 400
+
+        if len(text) > MAX_AI_TEXT_CHARS:
+            return jsonify({'error': f'Text ist zu lang (max. {MAX_AI_TEXT_CHARS} Zeichen)'}), 400
         
         if target_language == 'de':
             return jsonify({'translated_text': text})
@@ -1671,6 +1758,10 @@ def proxy_translate():
         session_code = data.get('session_code', '').upper().strip()
         
         if session_code:
+            auth_error = require_teacher_access(session_code, data)
+            if auth_error:
+                return auth_error
+
             keys = get_session_keys(session_code)
             if not keys:
                 return jsonify({'error': 'Session nicht gefunden'}), 404

@@ -1353,6 +1353,7 @@
         const API_BASE_URL = window.location.origin;
         let socket = null;
         let currentSessionCode = null;
+        let teacherToken = null;
         let selectedVoice = '21m00Tcm4TlvDq8ikWAM';
         let sessionPIN = '';
         let currentTasks = [];
@@ -1480,6 +1481,10 @@
             document.getElementById('phaseActive').classList.add('active');
 
             document.getElementById('sessionCodeDisplay').textContent = data.code;
+            teacherToken = data.teacher_token || null;
+            if (teacherToken) {
+                sessionStorage.setItem('teacher_token_' + data.code, teacherToken);
+            }
             
             const expires = new Date(data.expires);
             document.getElementById('sessionExpires').textContent = expires.toLocaleTimeString('de-DE');
@@ -1501,6 +1506,7 @@
             document.getElementById('phaseActive').classList.remove('active');
             document.getElementById('phaseCreate').classList.add('active');
             currentSessionCode = null;
+            teacherToken = null;
         }
 
         async function shareText() {
@@ -1517,6 +1523,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         code: currentSessionCode,
+                        teacher_token: teacherToken,
                         text: text
                     })
                 });
@@ -1781,7 +1788,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         text: text,
-                        session_code: currentSessionCode
+                        session_code: currentSessionCode,
+                        teacher_token: teacherToken
                     })
                 });
 

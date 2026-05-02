@@ -999,6 +999,12 @@
                     console.error('Error parsing pre-generated tasks:', e);
                 }
             }
+
+            if (sessionCode) {
+                document.getElementById('textPreview').textContent = 'Noch keine Aufgaben freigegeben. Bitte warte, bis deine Lehrkraft Aufgaben bereitstellt.';
+                document.getElementById('generateBtn').disabled = true;
+                document.getElementById('generateBtnText').textContent = 'Warten auf Freigabe';
+            }
         }
 
         // Normalize backend task format to frontend format
@@ -1057,6 +1063,11 @@
         }
 
         async function generateTasks() {
+            if (sessionCode) {
+                showToast('Aufgaben werden von deiner Lehrkraft freigegeben.', 'info');
+                return;
+            }
+
             const btn = document.getElementById('generateBtn');
             btn.disabled = true;
             document.getElementById('generateBtnText').innerHTML = '<span class="spinner"></span> Generiere Aufgaben...';
