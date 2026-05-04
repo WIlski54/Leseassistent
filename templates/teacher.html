@@ -1443,6 +1443,14 @@
             socket.on('translation_request_removed', (data) => {
                 removeTranslationRequest(data.student_sid);
             });
+
+            socket.on('student_level_update', (data) => {
+                studentLevels[data.student_sid] = {
+                    level: data.level,
+                    anonymous_id: data.anonymous_id
+                };
+                updateSimplificationUsage();
+            });
         }
 
         function initVoiceSelection() {
@@ -2016,14 +2024,6 @@
             }).join('');
         }
 
-        // Socket event für Schüler-Level-Updates
-        socket.on('student_level_update', (data) => {
-            studentLevels[data.student_sid] = {
-                level: data.level,
-                anonymous_id: data.anonymous_id
-            };
-            updateSimplificationUsage();
-        });
     </script>
 </body>
 </html>

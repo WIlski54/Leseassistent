@@ -82,6 +82,7 @@ socketio = SocketIO(app, cors_allowed_origins=CORS_ORIGINS, async_mode=ASYNC_MOD
 
 MAX_AI_TEXT_CHARS = int(os.environ.get('MAX_AI_TEXT_CHARS', '20000'))
 MAX_TTS_CHARS = int(os.environ.get('MAX_TTS_CHARS', '10000'))
+GEMINI_TEXT_MODEL = os.environ.get('GEMINI_TEXT_MODEL', 'gemini-2.5-flash')
 
 def get_request_teacher_token(data=None):
     """Liest das Lehrer-Token aus Header oder JSON-Body."""
@@ -760,15 +761,17 @@ TEXT:
             
     elif ai_provider == 'google':
         response = requests.post(
-            f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={ai_key}',
+            f'https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_TEXT_MODEL}:generateContent?key={ai_key}',
             headers={'Content-Type': 'application/json'},
             json={
                 'contents': [{'parts': [{'text': prompt}]}],
                 'generationConfig': {'temperature': 0.3}
-            }
+            },
+            timeout=60
         )
         if response.status_code == 200:
             return response.json()['candidates'][0]['content']['parts'][0]['text'].strip()
+        raise Exception(f'Google Error ({response.status_code}): {response.text[:500]}')
             
     elif ai_provider == 'anthropic':
         response = requests.post(
@@ -840,7 +843,7 @@ Antworte NUR mit dem JSON-Objekt, keine Erklärungen davor oder danach.
                     
         elif ai_provider == 'google':
             response = requests.post(
-                f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={ai_key}',
+                f'https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_TEXT_MODEL}:generateContent?key={ai_key}',
                 headers={'Content-Type': 'application/json'},
                 json={
                     'contents': [{'parts': [{'text': prompt}]}],
@@ -1096,7 +1099,7 @@ def simplify_text_with_ai(text, level, ai_key, ai_provider):
                 
         elif ai_provider == 'google':
             response = requests.post(
-                f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={ai_key}',
+                f'https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_TEXT_MODEL}:generateContent?key={ai_key}',
                 headers={'Content-Type': 'application/json'},
                 json={
                     'contents': [{'parts': [{'text': prompt}]}],
@@ -1331,7 +1334,7 @@ Antworte NUR mit dem JSON-Array, keine anderen Texte."""
         elif ai_provider == 'google':
             import requests as req
             response = req.post(
-                f'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={ai_key}',
+                f'https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_TEXT_MODEL}:generateContent?key={ai_key}',
                 headers={'Content-Type': 'application/json'},
                 json={
                     'contents': [{'parts': [{'text': prompt}]}],
@@ -1791,7 +1794,7 @@ def call_anthropic_text(api_key, system_prompt, user_message):
     return response.json()['content'][0]['text']
 
 def call_google_text(api_key, system_prompt, user_message):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_TEXT_MODEL}:generateContent?key={api_key}"
     payload = {
         'contents': [{'parts': [{'text': f"{system_prompt}\n\n{user_message}"}]}]
     }
@@ -1846,7 +1849,7 @@ def call_anthropic_vision(api_key, prompt, image_base64, mime_type):
     return response.json()['content'][0]['text']
 
 def call_google_vision(api_key, prompt, image_base64, mime_type):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_TEXT_MODEL}:generateContent?key={api_key}"
     payload = {
         'contents': [{
             'parts': [
@@ -1871,7 +1874,7 @@ def transcribe_with_whisper(api_key, audio_data, language):
     return jsonify({'text': response.json()['text']})
 
 def transcribe_with_gemini(api_key, audio_data, language):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_TEXT_MODEL}:generateContent?key={api_key}"
     audio_base64 = base64.b64encode(audio_data).decode('utf-8')
     payload = {
         'contents': [{
